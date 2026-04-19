@@ -104,3 +104,10 @@ def create_taller(
     db.flush()
     db.refresh(taller)
     return taller
+
+def get_roles_by_usuario_id(db: Session, id_usuario: int) -> list[str]:
+    return db.execute(
+        select(Rol.nombre)
+        .join(UsuarioRol, UsuarioRol.id_rol == Rol.id_rol)
+        .where(UsuarioRol.id_usuario == id_usuario)
+    ).scalars().all()

@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from app.modules.autenticacion_seguridad.models import Usuario
+from app.shared.dependencies.auth import get_current_user
 
 from app.core.db.session import get_db
 from app.modules.autenticacion_seguridad.schemas import (
@@ -9,11 +11,13 @@ from app.modules.autenticacion_seguridad.schemas import (
     RegistroTallerRequest,
     RegistroTallerResponse,
     TokenResponse,
+        UsuarioMeResponse,
 )
 from app.modules.autenticacion_seguridad.service import (
     login_service,
     register_cliente_service,
     register_taller_service,
+        get_me_service,
 )
 
 router = APIRouter(prefix="/auth", tags=["Autenticación y Seguridad"])
@@ -71,3 +75,14 @@ def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e),
         )
+    
+@router.get(
+    "/me",
+    response_model=UsuarioMeResponse,
+    status_code=status.HTTP_200_OK,
+)
+def me(
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    return get_me_service(db, current_user)

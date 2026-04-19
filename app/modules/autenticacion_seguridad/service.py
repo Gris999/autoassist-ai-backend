@@ -13,6 +13,7 @@ from app.modules.autenticacion_seguridad.repository import (
     get_rol_by_nombre,
     get_tipo_taller_by_id,
     get_usuario_by_email,
+    get_roles_by_usuario_id,    
 )
 from app.modules.autenticacion_seguridad.schemas import (
     LoginRequest,
@@ -22,6 +23,7 @@ from app.modules.autenticacion_seguridad.schemas import (
     RegistroTallerResponse,
     TokenResponse,
     UsuarioResponse,
+    UsuarioMeResponse,
 )
 
 
@@ -147,4 +149,21 @@ def login_service(
     return TokenResponse(
         access_token=token,
         token_type="bearer",
+    )
+
+def get_me_service(
+    db: Session,
+    current_user,
+) -> UsuarioMeResponse:
+    roles = get_roles_by_usuario_id(db, current_user.id_usuario)
+
+    return UsuarioMeResponse(
+        id_usuario=current_user.id_usuario,
+        nombres=current_user.nombres,
+        apellidos=current_user.apellidos,
+        celular=current_user.celular,
+        email=current_user.email,
+        estado=current_user.estado,
+        fecha_registro=current_user.fecha_registro,
+        roles=roles,
     )

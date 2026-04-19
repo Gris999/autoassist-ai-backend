@@ -71,3 +71,14 @@ class RegistroTallerResponse(BaseModel):
     usuario: UsuarioResponse
     rol: str
     nombre_taller: str
+
+
+class UsuarioMeResponse(BaseModel):
+    id_usuario: int
+    nombres: str
+    apellidos: str
+    celular: str
+    email: EmailStr
+    estado: bool
+    fecha_registro: datetime
+    roles: list[str]
