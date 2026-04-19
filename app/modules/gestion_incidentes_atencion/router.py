@@ -6,9 +6,11 @@ from app.modules.autenticacion_seguridad.models import Usuario
 from app.modules.autenticacion_seguridad.permissions import require_roles
 from app.modules.gestion_incidentes_atencion.schemas import (
     IncidenteCreateRequest,
+    IncidenteDetalleResponse,
     IncidenteResponse,
 )
 from app.modules.gestion_incidentes_atencion.service import (
+    get_incidente_detalle_service,
     get_mis_incidentes_service,
     report_incidente_service,
 )
@@ -49,5 +51,24 @@ def get_mis_incidentes(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.get(
+    "/{id_incidente}",
+    response_model=IncidenteDetalleResponse,
+    status_code=status.HTTP_200_OK,
+)
+def get_incidente_detalle(
+    id_incidente: int,
+    current_user: Usuario = Depends(require_roles("CLIENTE")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return get_incidente_detalle_service(db, current_user, id_incidente)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )

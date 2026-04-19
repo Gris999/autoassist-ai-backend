@@ -4,6 +4,7 @@ from app.modules.gestion_clientes.repository import get_cliente_by_usuario_id
 from app.modules.gestion_incidentes_atencion.repository import (
     create_incidente,
     get_estado_servicio_by_nombre,
+    get_incidente_by_id_and_cliente,
     get_incidentes_by_cliente_id,
     get_prioridad_by_nombre,
     get_tipo_incidente_by_id,
@@ -11,6 +12,7 @@ from app.modules.gestion_incidentes_atencion.repository import (
 )
 from app.modules.gestion_incidentes_atencion.schemas import (
     IncidenteCreateRequest,
+    IncidenteDetalleResponse,
     IncidenteResponse,
 )
 
@@ -74,3 +76,38 @@ def get_mis_incidentes_service(
 
     incidentes = get_incidentes_by_cliente_id(db, cliente.id_cliente)
     return [IncidenteResponse.model_validate(i) for i in incidentes]
+
+
+def get_incidente_detalle_service(
+    db: Session,
+    current_user,
+    id_incidente: int,
+) -> IncidenteDetalleResponse:
+    cliente = get_cliente_by_usuario_id(db, current_user.id_usuario)
+    if not cliente:
+        raise ValueError("El usuario autenticado no tiene perfil de cliente.")
+
+    incidente = get_incidente_by_id_and_cliente(db, id_incidente, cliente.id_cliente)
+    if not incidente:
+        raise ValueError("El incidente no existe o no pertenece al cliente autenticado.")
+
+    return IncidenteDetalleResponse(
+        id_incidente=incidente.id_incidente,
+        titulo=incidente.titulo,
+        descripcion_texto=incidente.descripcion_texto,
+        direccion_referencia=incidente.direccion_referencia,
+        latitud=incidente.latitud,
+        longitud=incidente.longitud,
+        fecha_reporte=incidente.fecha_reporte,
+        id_vehiculo=incidente.id_vehiculo,
+        id_tipo_incidente=incidente.id_tipo_incidente,
+        tipo_incidente=incidente.tipo_incidente.nombre,
+        id_prioridad=incidente.id_prioridad,
+        prioridad=incidente.prioridad.nombre,
+        id_estado_servicio_actual=incidente.id_estado_servicio_actual,
+        estado_servicio_actual=incidente.estado_servicio_actual.nombre,
+        clasificacion_ia=incidente.clasificacion_ia,
+        confianza_clasificacion=incidente.confianza_clasificacion,
+        resumen_ia=incidente.resumen_ia,
+        requiere_mas_info=incidente.requiere_mas_info,
+    )

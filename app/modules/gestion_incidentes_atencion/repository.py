@@ -1,5 +1,5 @@
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.modules.gestion_clientes.models import Vehiculo
 from app.modules.gestion_incidentes_atencion.models import (
@@ -77,3 +77,18 @@ def get_incidentes_by_cliente_id(db: Session, id_cliente: int) -> list[Incidente
     return db.execute(
         select(Incidente).where(Incidente.id_cliente == id_cliente)
     ).scalars().all()
+
+
+def get_incidente_by_id_and_cliente(db: Session, id_incidente: int, id_cliente: int) -> Incidente | None:
+    return db.execute(
+        select(Incidente)
+        .options(
+            joinedload(Incidente.tipo_incidente),
+            joinedload(Incidente.prioridad),
+            joinedload(Incidente.estado_servicio_actual),
+        )
+        .where(
+            Incidente.id_incidente == id_incidente,
+            Incidente.id_cliente == id_cliente,
+        )
+    ).scalar_one_or_none()
