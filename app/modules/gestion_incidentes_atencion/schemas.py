@@ -33,3 +33,22 @@ class IncidenteResponse(BaseModel):
     requiere_mas_info: bool
 
     model_config = ConfigDict(from_attributes=True)
+
+class IncidenteDisponibleResponse(BaseModel):
+    id_incidente: int
+    titulo: str
+    descripcion_texto: str | None = None
+    direccion_referencia: str | None = None
+    latitud: Decimal | None = None
+    longitud: Decimal | None = None
+    fecha_reporte: datetime
+
+    id_vehiculo: int
+    id_tipo_incidente: int
+    tipo_incidente: str
+
+    id_prioridad: int
+    prioridad: str
+
+    id_estado_servicio_actual: int
+    estado_servicio_actual: str

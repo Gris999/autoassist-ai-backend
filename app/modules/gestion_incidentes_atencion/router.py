@@ -7,10 +7,12 @@ from app.modules.autenticacion_seguridad.permissions import require_roles
 from app.modules.gestion_incidentes_atencion.schemas import (
     IncidenteCreateRequest,
     IncidenteResponse,
+    IncidenteDisponibleResponse,
 )
 from app.modules.gestion_incidentes_atencion.service import (
     get_mis_incidentes_service,
     report_incidente_service,
+    get_incidentes_disponibles_service,
 )
 
 router = APIRouter(prefix="/incidentes", tags=["Gestión Incidentes y Atención"])
@@ -46,6 +48,24 @@ def get_mis_incidentes(
 ):
     try:
         return get_mis_incidentes_service(db, current_user)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    
+
+@router.get(
+    "/disponibles",
+    response_model=list[IncidenteDisponibleResponse],
+    status_code=status.HTTP_200_OK,
+)
+def get_incidentes_disponibles(
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return get_incidentes_disponibles_service(db)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

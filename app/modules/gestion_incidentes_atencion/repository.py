@@ -92,3 +92,17 @@ def get_incidente_by_id_and_cliente(db: Session, id_incidente: int, id_cliente: 
             Incidente.id_cliente == id_cliente,
         )
     ).scalar_one_or_none()
+
+def get_incidentes_disponibles(db: Session) -> list[Incidente]:
+    return db.execute(
+        select(Incidente)
+        .options(
+            joinedload(Incidente.tipo_incidente),
+            joinedload(Incidente.prioridad),
+            joinedload(Incidente.estado_servicio_actual),
+        )
+        .where(
+            Incidente.asignacion_servicio == None,  # noqa: E711
+        )
+        .order_by(Incidente.fecha_reporte.desc())
+    ).scalars().all()

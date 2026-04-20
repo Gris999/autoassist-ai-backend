@@ -8,10 +8,12 @@ from app.modules.gestion_incidentes_atencion.repository import (
     get_prioridad_by_nombre,
     get_tipo_incidente_by_id,
     get_vehiculo_by_id_and_cliente,
+    get_incidentes_disponibles,
 )
 from app.modules.gestion_incidentes_atencion.schemas import (
     IncidenteCreateRequest,
     IncidenteResponse,
+    IncidenteDisponibleResponse,
 )
 
 
@@ -74,3 +76,28 @@ def get_mis_incidentes_service(
 
     incidentes = get_incidentes_by_cliente_id(db, cliente.id_cliente)
     return [IncidenteResponse.model_validate(i) for i in incidentes]
+
+
+
+def get_incidentes_disponibles_service(db: Session) -> list[IncidenteDisponibleResponse]:
+    incidentes = get_incidentes_disponibles(db)
+
+    return [
+        IncidenteDisponibleResponse(
+            id_incidente=incidente.id_incidente,
+            titulo=incidente.titulo,
+            descripcion_texto=incidente.descripcion_texto,
+            direccion_referencia=incidente.direccion_referencia,
+            latitud=incidente.latitud,
+            longitud=incidente.longitud,
+            fecha_reporte=incidente.fecha_reporte,
+            id_vehiculo=incidente.id_vehiculo,
+            id_tipo_incidente=incidente.id_tipo_incidente,
+            tipo_incidente=incidente.tipo_incidente.nombre,
+            id_prioridad=incidente.id_prioridad,
+            prioridad=incidente.prioridad.nombre,
+            id_estado_servicio_actual=incidente.id_estado_servicio_actual,
+            estado_servicio_actual=incidente.estado_servicio_actual.nombre,
+        )
+        for incidente in incidentes
+    ]
