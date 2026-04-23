@@ -74,3 +74,4 @@ class Vehiculo(Base):
 
     cliente: Mapped["Cliente"] = relationship(back_populates="vehiculos")
     tipo_vehiculo: Mapped["TipoVehiculo"] = relationship(back_populates="vehiculos")
+    
