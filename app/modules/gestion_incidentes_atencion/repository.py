@@ -7,6 +7,7 @@ from app.modules.gestion_clientes.models import Vehiculo
 from app.modules.gestion_incidentes_atencion.models import (
     AsignacionServicio,
     EstadoServicio,
+    HistorialIncidente,
     Incidente,
     Prioridad,
     SolicitudTaller,
@@ -30,6 +31,15 @@ def get_prioridad_by_nombre(db: Session, nombre: str) -> Prioridad | None:
 def get_estado_servicio_by_nombre(db: Session, nombre: str) -> EstadoServicio | None:
     return db.execute(
         select(EstadoServicio).where(EstadoServicio.nombre == nombre)
+    ).scalar_one_or_none()
+
+
+def get_estado_servicio_by_id(db: Session, id_estado_servicio: int) -> EstadoServicio | None:
+    return db.execute(
+        select(EstadoServicio).where(
+            EstadoServicio.id_estado_servicio == id_estado_servicio,
+            EstadoServicio.estado == True,
+        )
     ).scalar_one_or_none()
 
 
@@ -332,3 +342,37 @@ def update_unidad_movil_disponibilidad(
     db.flush()
     db.refresh(unidad_movil)
     return unidad_movil
+
+
+def update_asignacion_servicio_estado(
+    db: Session,
+    asignacion_servicio: AsignacionServicio,
+    *,
+    estado_asignacion: str,
+) -> AsignacionServicio:
+    asignacion_servicio.estado_asignacion = estado_asignacion
+    db.flush()
+    db.refresh(asignacion_servicio)
+    return asignacion_servicio
+
+
+def create_historial_incidente(
+    db: Session,
+    *,
+    id_incidente: int,
+    id_estado_anterior: int | None,
+    id_estado_nuevo: int,
+    id_usuario_actor: int,
+    detalle: str | None,
+) -> HistorialIncidente:
+    historial = HistorialIncidente(
+        id_incidente=id_incidente,
+        id_estado_anterior=id_estado_anterior,
+        id_estado_nuevo=id_estado_nuevo,
+        id_usuario_actor=id_usuario_actor,
+        detalle=detalle,
+    )
+    db.add(historial)
+    db.flush()
+    db.refresh(historial)
+    return historial

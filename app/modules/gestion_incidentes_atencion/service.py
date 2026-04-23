@@ -3,10 +3,12 @@ from sqlalchemy.orm import Session
 from app.modules.gestion_operativa_taller_tecnico.repository import get_taller_by_usuario_id
 from app.modules.gestion_clientes.repository import get_cliente_by_usuario_id
 from app.modules.gestion_incidentes_atencion.repository import (
+    create_historial_incidente,
     create_asignacion_servicio,
     create_incidente,
     get_asignacion_servicio_by_incidente_id,
     get_asignacion_servicio_by_incidente_id_for_update,
+    get_estado_servicio_by_id,
     get_incidente_by_id_for_update,
     get_incidente_by_id,
     get_estado_servicio_by_nombre,
@@ -26,11 +28,15 @@ from app.modules.gestion_incidentes_atencion.repository import (
     update_tecnico_disponibilidad,
     update_incidente_estado_servicio_actual,
     update_solicitud_taller_respuesta,
+    update_asignacion_servicio_estado,
     update_unidad_movil_disponibilidad,
 )
 from app.modules.gestion_incidentes_atencion.schemas import (
+    ActualizacionEstadoServicioResponse,
+    ActualizarEstadoServicioRequest,
     AsignacionIncidenteRequest,
     AsignacionIncidenteResponse,
+    EstadoServicioIncidenteResponse,
     IncidenteCreateRequest,
     IncidenteResponse,
     IncidenteDisponibleResponse,
@@ -45,6 +51,7 @@ ESTADO_SOLICITUD_PENDIENTE = "PENDIENTE"
 ESTADO_SOLICITUD_ACEPTADA = "ACEPTADA"
 ESTADO_SOLICITUD_RECHAZADA = "RECHAZADA"
 ESTADO_ASIGNACION_SERVICIO = "ASIGNADO"
+ESTADOS_FINALES_SERVICIO = {"FINALIZADO", "CANCELADO"}
 ESTADOS_INCIDENTE_NO_DISPONIBLE_RESPUESTA = {
     "ASIGNADO",
     "EN_CAMINO",
@@ -166,6 +173,42 @@ def _to_asignacion_incidente_response(
     )
 
 
+def _to_estado_servicio_incidente_response(
+    incidente,
+    asignacion_servicio,
+    *,
+    id_taller: int,
+) -> EstadoServicioIncidenteResponse:
+    return EstadoServicioIncidenteResponse(
+        id_incidente=incidente.id_incidente,
+        id_taller=id_taller,
+        id_estado_servicio_actual=incidente.id_estado_servicio_actual,
+        estado_servicio_actual=incidente.estado_servicio_actual.nombre,
+        orden_flujo_actual=incidente.estado_servicio_actual.orden_flujo,
+        estado_asignacion=asignacion_servicio.estado_asignacion if asignacion_servicio else None,
+    )
+
+
+def _to_actualizacion_estado_servicio_response(
+    *,
+    id_incidente: int,
+    id_taller: int,
+    estado_anterior,
+    estado_nuevo,
+    historial,
+) -> ActualizacionEstadoServicioResponse:
+    return ActualizacionEstadoServicioResponse(
+        id_incidente=id_incidente,
+        id_taller=id_taller,
+        id_estado_anterior=estado_anterior.id_estado_servicio,
+        estado_anterior=estado_anterior.nombre,
+        id_estado_nuevo=estado_nuevo.id_estado_servicio,
+        estado_nuevo=estado_nuevo.nombre,
+        fecha_hora=historial.fecha_hora,
+        detalle=historial.detalle,
+    )
+
+
 def _validar_incidente_aceptado_para_taller(db: Session, *, id_incidente: int, id_taller: int):
     incidente = get_incidente_by_id(db, id_incidente)
     if not incidente:
@@ -185,6 +228,39 @@ def _validar_incidente_aceptado_para_taller(db: Session, *, id_incidente: int, i
         raise ValueError("El incidente ya tiene una asignacion registrada.")
 
     return incidente
+
+
+def _validar_incidente_asignado_al_taller_para_estado(
+    db: Session,
+    *,
+    id_incidente: int,
+    id_taller: int,
+):
+    incidente = get_incidente_by_id(db, id_incidente)
+    if not incidente:
+        raise ValueError("El incidente especificado no existe.")
+
+    asignacion_servicio = get_asignacion_servicio_by_incidente_id(db, id_incidente)
+    if not asignacion_servicio:
+        raise ValueError("El incidente no tiene una asignacion de servicio registrada.")
+    if asignacion_servicio.id_taller != id_taller:
+        raise ValueError("El incidente no pertenece al taller autenticado.")
+
+    return incidente, asignacion_servicio
+
+
+def _validar_transicion_estado_servicio(estado_actual, nuevo_estado) -> None:
+    if estado_actual.id_estado_servicio == nuevo_estado.id_estado_servicio:
+        raise ValueError("El nuevo estado no puede ser igual al estado actual.")
+
+    if estado_actual.nombre in ESTADOS_FINALES_SERVICIO:
+        raise ValueError("No se puede actualizar un servicio que ya se encuentra finalizado o cancelado.")
+
+    if nuevo_estado.nombre == "CANCELADO":
+        return
+
+    if nuevo_estado.orden_flujo != estado_actual.orden_flujo + 1:
+        raise ValueError("La transicion de estado no es valida segun el flujo configurado.")
 
 
 def report_incidente_service(
@@ -446,6 +522,91 @@ def asignar_tecnico_unidad_incidente_service(
         db.commit()
         incidente_actualizado = get_incidente_by_id(db, id_incidente)
         return _to_asignacion_incidente_response(asignacion, incidente_actualizado)
+    except Exception:
+        db.rollback()
+        raise
+
+
+def get_estado_servicio_incidente_service(
+    db: Session,
+    current_user,
+    id_incidente: int,
+) -> EstadoServicioIncidenteResponse:
+    taller = _get_taller_actor_service(db, current_user)
+    incidente, asignacion_servicio = _validar_incidente_asignado_al_taller_para_estado(
+        db,
+        id_incidente=id_incidente,
+        id_taller=taller.id_taller,
+    )
+    return _to_estado_servicio_incidente_response(
+        incidente,
+        asignacion_servicio,
+        id_taller=taller.id_taller,
+    )
+
+
+def actualizar_estado_servicio_incidente_service(
+    db: Session,
+    current_user,
+    id_incidente: int,
+    payload: ActualizarEstadoServicioRequest,
+) -> ActualizacionEstadoServicioResponse:
+    taller = _get_taller_actor_service(db, current_user)
+
+    try:
+        incidente = get_incidente_by_id_for_update(db, id_incidente)
+        if not incidente:
+            raise ValueError("El incidente especificado no existe.")
+
+        asignacion_servicio = get_asignacion_servicio_by_incidente_id_for_update(db, id_incidente)
+        if not asignacion_servicio:
+            raise ValueError("El incidente no tiene una asignacion de servicio registrada.")
+        if asignacion_servicio.id_taller != taller.id_taller:
+            raise ValueError("El incidente no pertenece al taller autenticado.")
+
+        estado_actual = incidente.estado_servicio_actual
+        nuevo_estado = get_estado_servicio_by_id(db, payload.id_estado_servicio)
+        if not nuevo_estado:
+            raise ValueError("El estado de servicio especificado no existe.")
+
+        _validar_transicion_estado_servicio(estado_actual, nuevo_estado)
+
+        update_incidente_estado_servicio_actual(
+            db,
+            incidente,
+            id_estado_servicio_actual=nuevo_estado.id_estado_servicio,
+        )
+        update_asignacion_servicio_estado(
+            db,
+            asignacion_servicio,
+            estado_asignacion=nuevo_estado.nombre,
+        )
+
+        if nuevo_estado.nombre in ESTADOS_FINALES_SERVICIO:
+            tecnico = asignacion_servicio.tecnico
+            unidad_movil = asignacion_servicio.unidad_movil
+            if tecnico and tecnico.estado:
+                update_tecnico_disponibilidad(db, tecnico, disponible=True)
+            if unidad_movil and unidad_movil.estado:
+                update_unidad_movil_disponibilidad(db, unidad_movil, disponible=True)
+
+        historial = create_historial_incidente(
+            db,
+            id_incidente=incidente.id_incidente,
+            id_estado_anterior=estado_actual.id_estado_servicio,
+            id_estado_nuevo=nuevo_estado.id_estado_servicio,
+            id_usuario_actor=current_user.id_usuario,
+            detalle=payload.detalle,
+        )
+
+        db.commit()
+        return _to_actualizacion_estado_servicio_response(
+            id_incidente=incidente.id_incidente,
+            id_taller=taller.id_taller,
+            estado_anterior=estado_actual,
+            estado_nuevo=nuevo_estado,
+            historial=historial,
+        )
     except Exception:
         db.rollback()
         raise

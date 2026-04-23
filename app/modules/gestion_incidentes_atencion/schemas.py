@@ -131,3 +131,28 @@ class AsignacionIncidenteResponse(BaseModel):
     observaciones: str | None = None
     id_estado_servicio_actual: int
     estado_servicio_actual: str
+
+
+class EstadoServicioIncidenteResponse(BaseModel):
+    id_incidente: int
+    id_taller: int
+    id_estado_servicio_actual: int
+    estado_servicio_actual: str
+    orden_flujo_actual: int
+    estado_asignacion: str | None = None
+
+
+class ActualizarEstadoServicioRequest(BaseModel):
+    id_estado_servicio: int
+    detalle: str | None = Field(default=None, max_length=2000)
+
+
+class ActualizacionEstadoServicioResponse(BaseModel):
+    id_incidente: int
+    id_taller: int
+    id_estado_anterior: int
+    estado_anterior: str
+    id_estado_nuevo: int
+    estado_nuevo: str
+    fecha_hora: datetime
+    detalle: str | None = None

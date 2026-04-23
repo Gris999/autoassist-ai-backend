@@ -5,8 +5,11 @@ from app.core.db.session import get_db
 from app.modules.autenticacion_seguridad.models import Usuario
 from app.modules.autenticacion_seguridad.permissions import require_roles
 from app.modules.gestion_incidentes_atencion.schemas import (
+    ActualizacionEstadoServicioResponse,
+    ActualizarEstadoServicioRequest,
     AsignacionIncidenteRequest,
     AsignacionIncidenteResponse,
+    EstadoServicioIncidenteResponse,
     IncidenteCreateRequest,
     IncidenteResponse,
     IncidenteDisponibleResponse,
@@ -17,7 +20,9 @@ from app.modules.gestion_incidentes_atencion.schemas import (
     UnidadMovilDisponibleAsignacionResponse,
 )
 from app.modules.gestion_incidentes_atencion.service import (
+    actualizar_estado_servicio_incidente_service,
     asignar_tecnico_unidad_incidente_service,
+    get_estado_servicio_incidente_service,
     get_mis_incidentes_service,
     listar_tecnicos_disponibles_para_incidente_service,
     listar_unidades_moviles_disponibles_para_incidente_service,
@@ -184,6 +189,50 @@ def asignar_tecnico_unidad_incidente(
 ):
     try:
         return asignar_tecnico_unidad_incidente_service(
+            db,
+            current_user,
+            id_incidente,
+            payload,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.get(
+    "/taller/incidentes/{id_incidente}/estado",
+    response_model=EstadoServicioIncidenteResponse,
+    status_code=status.HTTP_200_OK,
+)
+def get_estado_servicio_incidente(
+    id_incidente: int,
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return get_estado_servicio_incidente_service(db, current_user, id_incidente)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.patch(
+    "/taller/incidentes/{id_incidente}/estado",
+    response_model=ActualizacionEstadoServicioResponse,
+    status_code=status.HTTP_200_OK,
+)
+def actualizar_estado_servicio_incidente(
+    id_incidente: int,
+    payload: ActualizarEstadoServicioRequest,
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return actualizar_estado_servicio_incidente_service(
             db,
             current_user,
             id_incidente,
