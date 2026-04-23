@@ -109,3 +109,4 @@ class BitacoraSistema(Base):
     ip_origen: Mapped[str | None] = mapped_column(String(45), nullable=True)
 
     usuario: Mapped["Usuario"] = relationship(back_populates="bitacoras")
+    
