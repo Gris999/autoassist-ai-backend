@@ -8,11 +8,16 @@ from app.modules.gestion_incidentes_atencion.schemas import (
     IncidenteCreateRequest,
     IncidenteResponse,
     IncidenteDisponibleResponse,
+    ResponderSolicitudAtencionRequest,
+    RespuestaSolicitudAtencionResponse,
+    SolicitudAtencionDetalleResponse,
 )
 from app.modules.gestion_incidentes_atencion.service import (
     get_mis_incidentes_service,
+    get_solicitud_atencion_detalle_service,
     report_incidente_service,
     get_incidentes_disponibles_service,
+    responder_solicitud_atencion_service,
 )
 
 router = APIRouter(prefix="/incidentes", tags=["Gestión Incidentes y Atención"])
@@ -66,6 +71,50 @@ def get_incidentes_disponibles(
 ):
     try:
         return get_incidentes_disponibles_service(db)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.get(
+    "/taller/solicitudes-atencion/{id_solicitud_taller}",
+    response_model=SolicitudAtencionDetalleResponse,
+    status_code=status.HTTP_200_OK,
+)
+def get_solicitud_atencion_detalle(
+    id_solicitud_taller: int,
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return get_solicitud_atencion_detalle_service(db, current_user, id_solicitud_taller)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.patch(
+    "/taller/solicitudes-atencion/{id_solicitud_taller}/respuesta",
+    response_model=RespuestaSolicitudAtencionResponse,
+    status_code=status.HTTP_200_OK,
+)
+def responder_solicitud_atencion(
+    id_solicitud_taller: int,
+    payload: ResponderSolicitudAtencionRequest,
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return responder_solicitud_atencion_service(
+            db,
+            current_user,
+            id_solicitud_taller,
+            payload,
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

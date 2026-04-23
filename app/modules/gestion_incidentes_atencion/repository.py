@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
@@ -6,6 +8,7 @@ from app.modules.gestion_incidentes_atencion.models import (
     EstadoServicio,
     Incidente,
     Prioridad,
+    SolicitudTaller,
     TipoIncidente,
 )
 
@@ -106,3 +109,93 @@ def get_incidentes_disponibles(db: Session) -> list[Incidente]:
         )
         .order_by(Incidente.fecha_reporte.desc())
     ).scalars().all()
+
+
+def get_incidente_by_id(db: Session, id_incidente: int) -> Incidente | None:
+    return db.execute(
+        select(Incidente)
+        .options(
+            joinedload(Incidente.tipo_incidente),
+            joinedload(Incidente.prioridad),
+            joinedload(Incidente.estado_servicio_actual),
+        )
+        .where(Incidente.id_incidente == id_incidente)
+    ).scalar_one_or_none()
+
+
+def get_incidente_by_id_for_update(db: Session, id_incidente: int) -> Incidente | None:
+    return db.execute(
+        select(Incidente)
+        .options(
+            joinedload(Incidente.tipo_incidente),
+            joinedload(Incidente.prioridad),
+            joinedload(Incidente.estado_servicio_actual),
+        )
+        .where(Incidente.id_incidente == id_incidente)
+        .with_for_update()
+    ).scalar_one_or_none()
+
+
+def get_solicitud_taller_by_id(db: Session, id_solicitud_taller: int) -> SolicitudTaller | None:
+    return db.execute(
+        select(SolicitudTaller)
+        .options(
+            joinedload(SolicitudTaller.incidente).joinedload(Incidente.tipo_incidente),
+            joinedload(SolicitudTaller.incidente).joinedload(Incidente.prioridad),
+            joinedload(SolicitudTaller.incidente).joinedload(Incidente.estado_servicio_actual),
+        )
+        .where(SolicitudTaller.id_solicitud_taller == id_solicitud_taller)
+    ).scalar_one_or_none()
+
+
+def get_solicitud_taller_by_id_for_update(
+    db: Session,
+    id_solicitud_taller: int,
+) -> SolicitudTaller | None:
+    return db.execute(
+        select(SolicitudTaller)
+        .options(
+            joinedload(SolicitudTaller.incidente).joinedload(Incidente.tipo_incidente),
+            joinedload(SolicitudTaller.incidente).joinedload(Incidente.prioridad),
+            joinedload(SolicitudTaller.incidente).joinedload(Incidente.estado_servicio_actual),
+        )
+        .where(SolicitudTaller.id_solicitud_taller == id_solicitud_taller)
+        .with_for_update()
+    ).scalar_one_or_none()
+
+
+def get_solicitud_aceptada_by_incidente_id(
+    db: Session,
+    id_incidente: int,
+) -> SolicitudTaller | None:
+    return db.execute(
+        select(SolicitudTaller).where(
+            SolicitudTaller.id_incidente == id_incidente,
+            SolicitudTaller.estado_solicitud == "ACEPTADA",
+        )
+    ).scalar_one_or_none()
+
+
+def update_solicitud_taller_respuesta(
+    db: Session,
+    solicitud_taller: SolicitudTaller,
+    *,
+    estado_solicitud: str,
+) -> SolicitudTaller:
+    solicitud_taller.estado_solicitud = estado_solicitud
+    solicitud_taller.fecha_respuesta = datetime.utcnow()
+    db.flush()
+    db.refresh(solicitud_taller)
+    return solicitud_taller
+
+
+def update_incidente_estado_servicio_actual(
+    db: Session,
+    incidente: Incidente,
+    *,
+    id_estado_servicio_actual: int,
+) -> Incidente:
+    incidente.id_estado_servicio_actual = id_estado_servicio_actual
+    db.flush()
+    db.refresh(incidente)
+    return incidente

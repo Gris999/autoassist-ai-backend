@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -50,5 +51,43 @@ class IncidenteDisponibleResponse(BaseModel):
     id_prioridad: int
     prioridad: str
 
+    id_estado_servicio_actual: int
+    estado_servicio_actual: str
+
+
+class SolicitudAtencionDetalleResponse(BaseModel):
+    id_solicitud_taller: int
+    id_incidente: int
+    id_taller: int
+    distancia_km: Decimal | None = None
+    puntaje_asignacion: Decimal | None = None
+    estado_solicitud: str
+    fecha_envio: datetime
+    fecha_respuesta: datetime | None = None
+    titulo_incidente: str
+    descripcion_texto: str | None = None
+    direccion_referencia: str | None = None
+    latitud: Decimal | None = None
+    longitud: Decimal | None = None
+    fecha_reporte: datetime
+    id_tipo_incidente: int
+    tipo_incidente: str
+    id_prioridad: int
+    prioridad: str
+    id_estado_servicio_actual: int
+    estado_servicio_actual: str
+
+
+class ResponderSolicitudAtencionRequest(BaseModel):
+    accion: Literal["aceptar", "rechazar"]
+
+
+class RespuestaSolicitudAtencionResponse(BaseModel):
+    id_solicitud_taller: int
+    id_incidente: int
+    id_taller: int
+    accion: Literal["aceptar", "rechazar"]
+    estado_solicitud: str
+    fecha_respuesta: datetime
     id_estado_servicio_actual: int
     estado_servicio_actual: str
