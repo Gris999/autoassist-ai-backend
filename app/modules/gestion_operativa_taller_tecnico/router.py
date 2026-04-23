@@ -9,9 +9,13 @@ from app.modules.gestion_operativa_taller_tecnico.schemas import (
     ActualizarDisponibilidadTallerRequest,
     DisponibilidadTecnicoResponse,
     DisponibilidadTallerResponse,
+    EspecialidadResponse,
     TecnicoCreateRequest,
     TecnicoDetailResponse,
     TecnicoEstadoResponse,
+    TecnicoEspecialidadesAssignRequest,
+    TecnicoEspecialidadesResponse,
+    TecnicoEspecialidadesUpdateRequest,
     TecnicoListResponse,
     TecnicoUpdateRequest,
     TallerAuxilioCreateRequest,
@@ -22,17 +26,22 @@ from app.modules.gestion_operativa_taller_tecnico.schemas import (
 from app.modules.gestion_operativa_taller_tecnico.service import (
     actualizar_disponibilidad_tecnico_service,
     actualizar_disponibilidad_taller_service,
+    actualizar_especialidades_tecnico_service,
     actualizar_tecnico_service,
     deshabilitar_servicio_auxilio_service,
     deshabilitar_tecnico_service,
     habilitar_tecnico_service,
+    asignar_especialidades_tecnico_service,
     listar_servicios_auxilio_service,
+    listar_especialidades_disponibles_service,
+    listar_especialidades_tecnico_service,
     listar_tecnicos_service,
     obtener_tecnico_service,
     obtener_disponibilidad_tecnico_service,
     obtener_disponibilidad_taller_service,
     obtener_informacion_taller_service,
     obtener_talleres_disponibles_service,
+    quitar_especialidad_tecnico_service,
     registrar_tecnico_service,
     registrar_servicio_auxilio_service,
     actualizar_servicio_auxilio_service,
@@ -203,6 +212,108 @@ def deshabilitar_tecnico(
 ):
     try:
         return deshabilitar_tecnico_service(db, current_user, id_tecnico)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.get(
+    "/especialidades",
+    response_model=list[EspecialidadResponse],
+    status_code=status.HTTP_200_OK,
+)
+def listar_especialidades_disponibles(
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return listar_especialidades_disponibles_service(db, current_user)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.get(
+    "/tecnicos/{id_tecnico}/especialidades",
+    response_model=TecnicoEspecialidadesResponse,
+    status_code=status.HTTP_200_OK,
+)
+def listar_especialidades_tecnico(
+    id_tecnico: int,
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return listar_especialidades_tecnico_service(db, current_user, id_tecnico)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.post(
+    "/tecnicos/{id_tecnico}/especialidades",
+    response_model=TecnicoEspecialidadesResponse,
+    status_code=status.HTTP_200_OK,
+)
+def asignar_especialidades_tecnico(
+    id_tecnico: int,
+    payload: TecnicoEspecialidadesAssignRequest,
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return asignar_especialidades_tecnico_service(db, current_user, id_tecnico, payload)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.put(
+    "/tecnicos/{id_tecnico}/especialidades",
+    response_model=TecnicoEspecialidadesResponse,
+    status_code=status.HTTP_200_OK,
+)
+def actualizar_especialidades_tecnico(
+    id_tecnico: int,
+    payload: TecnicoEspecialidadesUpdateRequest,
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return actualizar_especialidades_tecnico_service(db, current_user, id_tecnico, payload)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.delete(
+    "/tecnicos/{id_tecnico}/especialidades/{id_especialidad}",
+    response_model=TecnicoEspecialidadesResponse,
+    status_code=status.HTTP_200_OK,
+)
+def quitar_especialidad_tecnico(
+    id_tecnico: int,
+    id_especialidad: int,
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return quitar_especialidad_tecnico_service(
+            db,
+            current_user,
+            id_tecnico,
+            id_especialidad,
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

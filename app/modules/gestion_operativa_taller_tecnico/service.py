@@ -9,7 +9,11 @@ from app.modules.autenticacion_seguridad.repository import (
 )
 from app.modules.gestion_operativa_taller_tecnico.repository import (
     create_tecnico,
+    create_tecnico_especialidad,
     create_taller_auxilio,
+    delete_tecnico_especialidades_by_ids,
+    get_especialidades_by_ids,
+    get_especialidades_disponibles,
     get_asignacion_activa_by_tecnico_id,
     get_taller_auxilio_by_id,
     get_taller_auxilio_by_taller_id_tipo_auxilio,
@@ -18,6 +22,7 @@ from app.modules.gestion_operativa_taller_tecnico.repository import (
     get_tecnico_with_usuario_by_id,
     get_tecnicos_by_taller_id,
     get_tecnico_by_usuario_id,
+    get_tecnico_especialidades_by_tecnico_id,
     get_talleres_disponibles,
     get_tipo_auxilio_by_id,
     set_disponibilidad_taller_auxilio,
@@ -32,9 +37,13 @@ from app.modules.gestion_operativa_taller_tecnico.schemas import (
     ActualizarDisponibilidadTecnicoRequest,
     ActualizarDisponibilidadTallerRequest,
     DisponibilidadTecnicoResponse,
+    EspecialidadResponse,
     TecnicoCreateRequest,
     TecnicoDetailResponse,
     TecnicoEstadoResponse,
+    TecnicoEspecialidadesAssignRequest,
+    TecnicoEspecialidadesResponse,
+    TecnicoEspecialidadesUpdateRequest,
     TecnicoListResponse,
     TecnicoUpdateRequest,
     TallerAuxilioCreateRequest,
@@ -98,6 +107,41 @@ def _to_tecnico_estado_response(tecnico) -> TecnicoEstadoResponse:
         id_usuario=tecnico.id_usuario,
         estado=tecnico.estado,
         disponible=tecnico.disponible,
+    )
+
+
+def _validar_ids_especialidad(ids_especialidad: list[int]) -> None:
+    if any(id_especialidad <= 0 for id_especialidad in ids_especialidad):
+        raise ValueError("Se enviaron ids de especialidad invalidos.")
+    if len(set(ids_especialidad)) != len(ids_especialidad):
+        raise ValueError("No se permiten ids de especialidad repetidos en la misma peticion.")
+
+
+def _obtener_especialidades_validas(db: Session, ids_especialidad: list[int]):
+    especialidades = get_especialidades_by_ids(db, ids_especialidad)
+    if len(especialidades) != len(set(ids_especialidad)):
+        raise ValueError("Una o mas especialidades especificadas no existen.")
+    return especialidades
+
+
+def _to_especialidad_response(especialidad) -> EspecialidadResponse:
+    return EspecialidadResponse(
+        id_especialidad=especialidad.id_especialidad,
+        nombre=especialidad.nombre,
+        descripcion=especialidad.descripcion,
+    )
+
+
+def _to_tecnico_especialidades_response(
+    id_tecnico: int,
+    tecnico_especialidades,
+) -> TecnicoEspecialidadesResponse:
+    return TecnicoEspecialidadesResponse(
+        id_tecnico=id_tecnico,
+        especialidades=[
+            _to_especialidad_response(tecnico_especialidad.especialidad)
+            for tecnico_especialidad in tecnico_especialidades
+        ],
     )
 
 
@@ -330,6 +374,141 @@ def deshabilitar_tecnico_service(
         db.commit()
         db.refresh(tecnico_actualizado)
         return _to_tecnico_estado_response(tecnico_actualizado)
+    except Exception:
+        db.rollback()
+        raise
+
+
+def listar_especialidades_disponibles_service(
+    db: Session,
+    current_user,
+) -> list[EspecialidadResponse]:
+    _get_taller_gestor_service(db, current_user)
+    especialidades = get_especialidades_disponibles(db)
+    return [_to_especialidad_response(especialidad) for especialidad in especialidades]
+
+
+def listar_especialidades_tecnico_service(
+    db: Session,
+    current_user,
+    id_tecnico: int,
+) -> TecnicoEspecialidadesResponse:
+    taller = _get_taller_gestor_service(db, current_user)
+    tecnico = _validar_tecnico_del_taller(db, id_tecnico, taller.id_taller)
+    tecnico_especialidades = get_tecnico_especialidades_by_tecnico_id(db, tecnico.id_tecnico)
+    return _to_tecnico_especialidades_response(tecnico.id_tecnico, tecnico_especialidades)
+
+
+def asignar_especialidades_tecnico_service(
+    db: Session,
+    current_user,
+    id_tecnico: int,
+    payload: TecnicoEspecialidadesAssignRequest,
+) -> TecnicoEspecialidadesResponse:
+    _validar_ids_especialidad(payload.ids_especialidad)
+    taller = _get_taller_gestor_service(db, current_user)
+    tecnico = _validar_tecnico_del_taller(db, id_tecnico, taller.id_taller)
+    _obtener_especialidades_validas(db, payload.ids_especialidad)
+
+    tecnico_especialidades_actuales = get_tecnico_especialidades_by_tecnico_id(db, tecnico.id_tecnico)
+    ids_actuales = {item.id_especialidad for item in tecnico_especialidades_actuales}
+    ids_duplicados = ids_actuales.intersection(payload.ids_especialidad)
+    if ids_duplicados:
+        raise ValueError("Una o mas especialidades ya estan asignadas al tecnico.")
+
+    try:
+        for id_especialidad in payload.ids_especialidad:
+            create_tecnico_especialidad(
+                db,
+                id_tecnico=tecnico.id_tecnico,
+                id_especialidad=id_especialidad,
+            )
+
+        db.commit()
+        tecnico_especialidades_actualizadas = get_tecnico_especialidades_by_tecnico_id(db, tecnico.id_tecnico)
+        return _to_tecnico_especialidades_response(
+            tecnico.id_tecnico,
+            tecnico_especialidades_actualizadas,
+        )
+    except Exception:
+        db.rollback()
+        raise
+
+
+def actualizar_especialidades_tecnico_service(
+    db: Session,
+    current_user,
+    id_tecnico: int,
+    payload: TecnicoEspecialidadesUpdateRequest,
+) -> TecnicoEspecialidadesResponse:
+    _validar_ids_especialidad(payload.ids_especialidad)
+    taller = _get_taller_gestor_service(db, current_user)
+    tecnico = _validar_tecnico_del_taller(db, id_tecnico, taller.id_taller)
+    _obtener_especialidades_validas(db, payload.ids_especialidad)
+
+    tecnico_especialidades_actuales = get_tecnico_especialidades_by_tecnico_id(db, tecnico.id_tecnico)
+    ids_actuales = {item.id_especialidad for item in tecnico_especialidades_actuales}
+    ids_nuevos = set(payload.ids_especialidad)
+    ids_a_quitar = list(ids_actuales - ids_nuevos)
+    ids_a_agregar = [
+        id_especialidad
+        for id_especialidad in payload.ids_especialidad
+        if id_especialidad not in ids_actuales
+    ]
+
+    try:
+        delete_tecnico_especialidades_by_ids(
+            db,
+            id_tecnico=tecnico.id_tecnico,
+            ids_especialidad=ids_a_quitar,
+        )
+
+        for id_especialidad in ids_a_agregar:
+            create_tecnico_especialidad(
+                db,
+                id_tecnico=tecnico.id_tecnico,
+                id_especialidad=id_especialidad,
+            )
+
+        db.commit()
+        tecnico_especialidades_actualizadas = get_tecnico_especialidades_by_tecnico_id(db, tecnico.id_tecnico)
+        return _to_tecnico_especialidades_response(
+            tecnico.id_tecnico,
+            tecnico_especialidades_actualizadas,
+        )
+    except Exception:
+        db.rollback()
+        raise
+
+
+def quitar_especialidad_tecnico_service(
+    db: Session,
+    current_user,
+    id_tecnico: int,
+    id_especialidad: int,
+) -> TecnicoEspecialidadesResponse:
+    _validar_ids_especialidad([id_especialidad])
+    taller = _get_taller_gestor_service(db, current_user)
+    tecnico = _validar_tecnico_del_taller(db, id_tecnico, taller.id_taller)
+    _obtener_especialidades_validas(db, [id_especialidad])
+
+    tecnico_especialidades_actuales = get_tecnico_especialidades_by_tecnico_id(db, tecnico.id_tecnico)
+    ids_actuales = {item.id_especialidad for item in tecnico_especialidades_actuales}
+    if id_especialidad not in ids_actuales:
+        raise ValueError("La especialidad especificada no esta asignada al tecnico.")
+
+    try:
+        delete_tecnico_especialidades_by_ids(
+            db,
+            id_tecnico=tecnico.id_tecnico,
+            ids_especialidad=[id_especialidad],
+        )
+        db.commit()
+        tecnico_especialidades_actualizadas = get_tecnico_especialidades_by_tecnico_id(db, tecnico.id_tecnico)
+        return _to_tecnico_especialidades_response(
+            tecnico.id_tecnico,
+            tecnico_especialidades_actualizadas,
+        )
     except Exception:
         db.rollback()
         raise

@@ -8,9 +8,11 @@ from app.modules.gestion_incidentes_atencion.models import (
     Incidente,
 )
 from app.modules.gestion_operativa_taller_tecnico.models import (
+    Especialidad,
     Taller,
     TallerAuxilio,
     Tecnico,
+    TecnicoEspecialidad,
     TipoAuxilio,
 )
 
@@ -262,6 +264,76 @@ def update_estado_tecnico(
     db.flush()
     db.refresh(tecnico)
     return tecnico
+
+
+def get_especialidades_disponibles(db: Session) -> list[Especialidad]:
+    return list(
+        db.execute(
+            select(Especialidad).order_by(Especialidad.nombre.asc())
+        ).scalars()
+    )
+
+
+def get_especialidades_by_ids(db: Session, ids_especialidad: list[int]) -> list[Especialidad]:
+    if not ids_especialidad:
+        return []
+    return list(
+        db.execute(
+            select(Especialidad).where(Especialidad.id_especialidad.in_(ids_especialidad))
+        ).scalars()
+    )
+
+
+def get_tecnico_especialidades_by_tecnico_id(
+    db: Session,
+    id_tecnico: int,
+) -> list[TecnicoEspecialidad]:
+    return list(
+        db.execute(
+            select(TecnicoEspecialidad)
+            .options(joinedload(TecnicoEspecialidad.especialidad))
+            .where(TecnicoEspecialidad.id_tecnico == id_tecnico)
+            .order_by(TecnicoEspecialidad.id_tecnico_especialidad.asc())
+        ).scalars()
+    )
+
+
+def create_tecnico_especialidad(
+    db: Session,
+    *,
+    id_tecnico: int,
+    id_especialidad: int,
+) -> TecnicoEspecialidad:
+    tecnico_especialidad = TecnicoEspecialidad(
+        id_tecnico=id_tecnico,
+        id_especialidad=id_especialidad,
+    )
+    db.add(tecnico_especialidad)
+    db.flush()
+    db.refresh(tecnico_especialidad)
+    return tecnico_especialidad
+
+
+def delete_tecnico_especialidades_by_ids(
+    db: Session,
+    *,
+    id_tecnico: int,
+    ids_especialidad: list[int],
+) -> None:
+    if not ids_especialidad:
+        return
+
+    tecnico_especialidades = db.execute(
+        select(TecnicoEspecialidad).where(
+            TecnicoEspecialidad.id_tecnico == id_tecnico,
+            TecnicoEspecialidad.id_especialidad.in_(ids_especialidad),
+        )
+    ).scalars().all()
+
+    for tecnico_especialidad in tecnico_especialidades:
+        db.delete(tecnico_especialidad)
+
+    db.flush()
 
 
 def get_asignacion_activa_by_tecnico_id(

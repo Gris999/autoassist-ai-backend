@@ -143,3 +143,24 @@ class TecnicoEstadoResponse(BaseModel):
     disponible: bool
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class EspecialidadResponse(BaseModel):
+    id_especialidad: int
+    nombre: str
+    descripcion: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TecnicoEspecialidadesResponse(BaseModel):
+    id_tecnico: int
+    especialidades: list[EspecialidadResponse]
+
+
+class TecnicoEspecialidadesAssignRequest(BaseModel):
+    ids_especialidad: list[int] = Field(min_length=1)
+
+
+class TecnicoEspecialidadesUpdateRequest(BaseModel):
+    ids_especialidad: list[int] = Field(default_factory=list)
