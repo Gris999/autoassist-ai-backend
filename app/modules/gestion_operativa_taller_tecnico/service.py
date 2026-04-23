@@ -8,6 +8,7 @@ from app.modules.autenticacion_seguridad.repository import (
     get_usuario_by_email,
 )
 from app.modules.gestion_operativa_taller_tecnico.repository import (
+    create_unidad_movil,
     create_tecnico,
     create_tecnico_especialidad,
     create_taller_tipo_vehiculo,
@@ -20,6 +21,9 @@ from app.modules.gestion_operativa_taller_tecnico.repository import (
     get_taller_auxilio_by_id,
     get_taller_auxilio_by_taller_id_tipo_auxilio,
     get_taller_by_usuario_id,
+    get_unidad_movil_by_id,
+    get_unidad_movil_by_placa,
+    get_unidades_moviles_by_taller_id,
     get_servicios_auxilio_por_taller_id,
     get_taller_tipos_vehiculo_by_taller_id,
     get_tecnico_with_usuario_by_id,
@@ -35,6 +39,7 @@ from app.modules.gestion_operativa_taller_tecnico.repository import (
     update_disponibilidad_tecnico,
     update_disponibilidad_taller,
     update_taller_auxilio,
+    update_unidad_movil,
     update_tecnico,
     update_usuario_tecnico,
 )
@@ -59,6 +64,11 @@ from app.modules.gestion_operativa_taller_tecnico.schemas import (
     DisponibilidadTallerResponse,
     TipoVehiculoResponse,
     TallerInfoResponse,
+    UnidadMovilCreateRequest,
+    UnidadMovilDetailResponse,
+    UnidadMovilEstadoDisponibilidadRequest,
+    UnidadMovilListResponse,
+    UnidadMovilUpdateRequest,
 )
 
 
@@ -188,6 +198,48 @@ def _to_taller_tipos_vehiculo_config_response(
     )
 
 
+def _validar_unidad_movil_del_taller(db: Session, id_unidad_movil: int, id_taller: int):
+    unidad_movil = get_unidad_movil_by_id(db, id_unidad_movil)
+    if not unidad_movil:
+        raise ValueError("La unidad movil especificada no existe.")
+    if unidad_movil.id_taller != id_taller:
+        raise ValueError("La unidad movil no pertenece al taller autenticado.")
+    return unidad_movil
+
+
+def _validar_consistencia_unidad_movil(*, disponible: bool, estado: bool) -> None:
+    if not estado and disponible:
+        raise ValueError("No se puede marcar como disponible una unidad movil deshabilitada.")
+
+
+def _to_unidad_movil_list_response(unidad_movil) -> UnidadMovilListResponse:
+    return UnidadMovilListResponse(
+        id_unidad_movil=unidad_movil.id_unidad_movil,
+        id_taller=unidad_movil.id_taller,
+        placa=unidad_movil.placa,
+        tipo_unidad=unidad_movil.tipo_unidad,
+        disponible=unidad_movil.disponible,
+        estado=unidad_movil.estado,
+    )
+
+
+def _to_unidad_movil_detail_response(unidad_movil) -> UnidadMovilDetailResponse:
+    return UnidadMovilDetailResponse(
+        id_unidad_movil=unidad_movil.id_unidad_movil,
+        id_taller=unidad_movil.id_taller,
+        placa=unidad_movil.placa,
+        tipo_unidad=unidad_movil.tipo_unidad,
+        disponible=unidad_movil.disponible,
+        estado=unidad_movil.estado,
+        latitud_actual=float(unidad_movil.latitud_actual)
+        if unidad_movil.latitud_actual is not None
+        else None,
+        longitud_actual=float(unidad_movil.longitud_actual)
+        if unidad_movil.longitud_actual is not None
+        else None,
+    )
+
+
 def obtener_disponibilidad_taller_service(
     db: Session,
     current_user,
@@ -286,13 +338,6 @@ def registrar_tecnico_service(
             password_hash=hash_password(payload.password),
         )
 
-        if not payload.estado:
-            update_usuario_tecnico(
-                db,
-                usuario,
-                estado=False,
-            )
-
         assign_rol_to_usuario(
             db,
             id_usuario=usuario.id_usuario,
@@ -377,11 +422,6 @@ def habilitar_tecnico_service(
     tecnico = _validar_tecnico_del_taller(db, id_tecnico, taller.id_taller)
 
     try:
-        update_usuario_tecnico(
-            db,
-            tecnico.usuario,
-            estado=True,
-        )
         tecnico_actualizado = update_estado_tecnico(
             db,
             tecnico,
@@ -404,11 +444,6 @@ def deshabilitar_tecnico_service(
     tecnico = _validar_tecnico_del_taller(db, id_tecnico, taller.id_taller)
 
     try:
-        update_usuario_tecnico(
-            db,
-            tecnico.usuario,
-            estado=False,
-        )
         tecnico_actualizado = update_estado_tecnico(
             db,
             tecnico,
@@ -614,6 +649,147 @@ def configurar_tipos_vehiculo_taller_service(
             taller.id_taller,
             taller_tipos_vehiculo_actualizados,
         )
+    except Exception:
+        db.rollback()
+        raise
+
+
+def listar_unidades_moviles_service(
+    db: Session,
+    current_user,
+) -> list[UnidadMovilListResponse]:
+    taller = _get_taller_gestor_service(db, current_user)
+    unidades_moviles = get_unidades_moviles_by_taller_id(db, taller.id_taller)
+    return [_to_unidad_movil_list_response(unidad_movil) for unidad_movil in unidades_moviles]
+
+
+def obtener_unidad_movil_service(
+    db: Session,
+    current_user,
+    id_unidad_movil: int,
+) -> UnidadMovilDetailResponse:
+    taller = _get_taller_gestor_service(db, current_user)
+    unidad_movil = _validar_unidad_movil_del_taller(db, id_unidad_movil, taller.id_taller)
+    return _to_unidad_movil_detail_response(unidad_movil)
+
+
+def registrar_unidad_movil_service(
+    db: Session,
+    current_user,
+    payload: UnidadMovilCreateRequest,
+) -> UnidadMovilDetailResponse:
+    taller = _get_taller_gestor_service(db, current_user)
+    _validar_consistencia_unidad_movil(
+        disponible=payload.disponible,
+        estado=payload.estado,
+    )
+
+    unidad_existente = get_unidad_movil_by_placa(db, payload.placa)
+    if unidad_existente:
+        raise ValueError("Ya existe una unidad movil registrada con esa placa.")
+
+    try:
+        unidad_movil = create_unidad_movil(
+            db,
+            id_taller=taller.id_taller,
+            placa=payload.placa,
+            tipo_unidad=payload.tipo_unidad,
+            disponible=payload.disponible,
+            estado=payload.estado,
+            latitud_actual=payload.latitud_actual,
+            longitud_actual=payload.longitud_actual,
+        )
+        db.commit()
+        db.refresh(unidad_movil)
+        return _to_unidad_movil_detail_response(unidad_movil)
+    except Exception:
+        db.rollback()
+        raise
+
+
+def actualizar_unidad_movil_service(
+    db: Session,
+    current_user,
+    id_unidad_movil: int,
+    payload: UnidadMovilUpdateRequest,
+) -> UnidadMovilDetailResponse:
+    taller = _get_taller_gestor_service(db, current_user)
+    unidad_movil = _validar_unidad_movil_del_taller(db, id_unidad_movil, taller.id_taller)
+
+    if (
+        payload.placa is None
+        and payload.tipo_unidad is None
+        and payload.disponible is None
+        and payload.estado is None
+        and payload.latitud_actual is None
+        and payload.longitud_actual is None
+    ):
+        raise ValueError("Debe indicar al menos un campo para actualizar.")
+
+    if payload.placa is not None:
+        unidad_existente = get_unidad_movil_by_placa(db, payload.placa)
+        if unidad_existente and unidad_existente.id_unidad_movil != unidad_movil.id_unidad_movil:
+            raise ValueError("Ya existe una unidad movil registrada con esa placa.")
+
+    estado_final = payload.estado if payload.estado is not None else unidad_movil.estado
+    disponible_final = (
+        payload.disponible if payload.disponible is not None else unidad_movil.disponible
+    )
+    _validar_consistencia_unidad_movil(
+        disponible=disponible_final,
+        estado=estado_final,
+    )
+
+    try:
+        unidad_movil_actualizada = update_unidad_movil(
+            db,
+            unidad_movil,
+            placa=payload.placa,
+            tipo_unidad=payload.tipo_unidad,
+            disponible=payload.disponible,
+            estado=payload.estado,
+            latitud_actual=payload.latitud_actual,
+            longitud_actual=payload.longitud_actual,
+        )
+        db.commit()
+        db.refresh(unidad_movil_actualizada)
+        return _to_unidad_movil_detail_response(unidad_movil_actualizada)
+    except Exception:
+        db.rollback()
+        raise
+
+
+def actualizar_estado_disponibilidad_unidad_movil_service(
+    db: Session,
+    current_user,
+    id_unidad_movil: int,
+    payload: UnidadMovilEstadoDisponibilidadRequest,
+) -> UnidadMovilDetailResponse:
+    taller = _get_taller_gestor_service(db, current_user)
+    unidad_movil = _validar_unidad_movil_del_taller(db, id_unidad_movil, taller.id_taller)
+
+    if payload.disponible is None and payload.estado is None:
+        raise ValueError("Debe indicar disponibilidad, estado o ambos para actualizar.")
+
+    estado_final = payload.estado if payload.estado is not None else unidad_movil.estado
+    disponible_final = (
+        payload.disponible if payload.disponible is not None else unidad_movil.disponible
+    )
+    _validar_consistencia_unidad_movil(
+        disponible=disponible_final,
+        estado=estado_final,
+    )
+
+    try:
+        unidad_movil_actualizada = update_unidad_movil(
+            db,
+            unidad_movil,
+            disponible=payload.disponible,
+            estado=payload.estado,
+        )
+        db.commit()
+        db.refresh(unidad_movil_actualizada)
+        return _to_unidad_movil_detail_response(unidad_movil_actualizada)
     except Exception:
         db.rollback()
         raise

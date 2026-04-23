@@ -181,3 +181,50 @@ class TallerTiposVehiculoConfigResponse(BaseModel):
 
 class TallerTiposVehiculoConfigRequest(BaseModel):
     ids_tipo_vehiculo: list[int] = Field(min_length=1)
+
+
+class UnidadMovilCreateRequest(BaseModel):
+    placa: str = Field(min_length=5, max_length=20)
+    tipo_unidad: str = Field(min_length=2, max_length=100)
+    disponible: bool = True
+    estado: bool = True
+    latitud_actual: float | None = None
+    longitud_actual: float | None = None
+
+
+class UnidadMovilUpdateRequest(BaseModel):
+    placa: str | None = Field(default=None, min_length=5, max_length=20)
+    tipo_unidad: str | None = Field(default=None, min_length=2, max_length=100)
+    disponible: bool | None = None
+    estado: bool | None = None
+    latitud_actual: float | None = None
+    longitud_actual: float | None = None
+
+
+class UnidadMovilEstadoDisponibilidadRequest(BaseModel):
+    disponible: bool | None = None
+    estado: bool | None = None
+
+
+class UnidadMovilListResponse(BaseModel):
+    id_unidad_movil: int
+    id_taller: int
+    placa: str
+    tipo_unidad: str
+    disponible: bool
+    estado: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UnidadMovilDetailResponse(BaseModel):
+    id_unidad_movil: int
+    id_taller: int
+    placa: str
+    tipo_unidad: str
+    disponible: bool
+    estado: bool
+    latitud_actual: float | None = None
+    longitud_actual: float | None = None
+
+    model_config = ConfigDict(from_attributes=True)

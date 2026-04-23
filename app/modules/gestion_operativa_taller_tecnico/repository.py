@@ -16,6 +16,7 @@ from app.modules.gestion_operativa_taller_tecnico.models import (
     TecnicoEspecialidad,
     TallerTipoVehiculo,
     TipoAuxilio,
+    UnidadMovil,
 )
 
 
@@ -266,6 +267,84 @@ def update_estado_tecnico(
     db.flush()
     db.refresh(tecnico)
     return tecnico
+
+
+def get_unidades_moviles_by_taller_id(db: Session, id_taller: int) -> list[UnidadMovil]:
+    return list(
+        db.execute(
+            select(UnidadMovil)
+            .where(UnidadMovil.id_taller == id_taller)
+            .order_by(UnidadMovil.id_unidad_movil.desc())
+        ).scalars()
+    )
+
+
+def get_unidad_movil_by_id(db: Session, id_unidad_movil: int) -> UnidadMovil | None:
+    return db.execute(
+        select(UnidadMovil).where(UnidadMovil.id_unidad_movil == id_unidad_movil)
+    ).scalar_one_or_none()
+
+
+def get_unidad_movil_by_placa(db: Session, placa: str) -> UnidadMovil | None:
+    return db.execute(
+        select(UnidadMovil).where(UnidadMovil.placa == placa)
+    ).scalar_one_or_none()
+
+
+def create_unidad_movil(
+    db: Session,
+    *,
+    id_taller: int,
+    placa: str,
+    tipo_unidad: str,
+    disponible: bool,
+    estado: bool,
+    latitud_actual: float | None = None,
+    longitud_actual: float | None = None,
+) -> UnidadMovil:
+    unidad_movil = UnidadMovil(
+        id_taller=id_taller,
+        placa=placa,
+        tipo_unidad=tipo_unidad,
+        disponible=disponible,
+        estado=estado,
+        latitud_actual=latitud_actual,
+        longitud_actual=longitud_actual,
+    )
+    db.add(unidad_movil)
+    db.flush()
+    db.refresh(unidad_movil)
+    return unidad_movil
+
+
+def update_unidad_movil(
+    db: Session,
+    unidad_movil: UnidadMovil,
+    *,
+    placa: str | None = None,
+    tipo_unidad: str | None = None,
+    disponible: bool | None = None,
+    estado: bool | None = None,
+    latitud_actual: float | None = None,
+    longitud_actual: float | None = None,
+) -> UnidadMovil:
+    if placa is not None:
+        unidad_movil.placa = placa
+    if tipo_unidad is not None:
+        unidad_movil.tipo_unidad = tipo_unidad
+    if estado is not None:
+        unidad_movil.estado = estado
+    if disponible is not None:
+        unidad_movil.disponible = disponible
+    if latitud_actual is not None:
+        unidad_movil.latitud_actual = latitud_actual
+    if longitud_actual is not None:
+        unidad_movil.longitud_actual = longitud_actual
+    if unidad_movil.estado is False:
+        unidad_movil.disponible = False
+    db.flush()
+    db.refresh(unidad_movil)
+    return unidad_movil
 
 
 def get_especialidades_disponibles(db: Session) -> list[Especialidad]:

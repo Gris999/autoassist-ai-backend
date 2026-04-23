@@ -25,12 +25,19 @@ from app.modules.gestion_operativa_taller_tecnico.schemas import (
     TallerAuxilioUpdateRequest,
     TallerInfoResponse,
     TipoVehiculoResponse,
+    UnidadMovilCreateRequest,
+    UnidadMovilDetailResponse,
+    UnidadMovilEstadoDisponibilidadRequest,
+    UnidadMovilListResponse,
+    UnidadMovilUpdateRequest,
 )
 from app.modules.gestion_operativa_taller_tecnico.service import (
     actualizar_disponibilidad_tecnico_service,
     actualizar_disponibilidad_taller_service,
     actualizar_especialidades_tecnico_service,
+    actualizar_estado_disponibilidad_unidad_movil_service,
     actualizar_tecnico_service,
+    actualizar_unidad_movil_service,
     configurar_tipos_vehiculo_taller_service,
     deshabilitar_servicio_auxilio_service,
     deshabilitar_tecnico_service,
@@ -41,13 +48,16 @@ from app.modules.gestion_operativa_taller_tecnico.service import (
     listar_especialidades_tecnico_service,
     listar_tecnicos_service,
     listar_tipos_vehiculo_disponibles_service,
+    listar_unidades_moviles_service,
     obtener_configuracion_tipos_vehiculo_taller_service,
     obtener_tecnico_service,
     obtener_disponibilidad_tecnico_service,
     obtener_disponibilidad_taller_service,
     obtener_informacion_taller_service,
+    obtener_unidad_movil_service,
     obtener_talleres_disponibles_service,
     quitar_especialidad_tecnico_service,
+    registrar_unidad_movil_service,
     registrar_tecnico_service,
     registrar_servicio_auxilio_service,
     actualizar_servicio_auxilio_service,
@@ -159,6 +169,107 @@ def configurar_tipos_vehiculo_taller(
 ):
     try:
         return configurar_tipos_vehiculo_taller_service(db, current_user, payload)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.get(
+    "/unidades-moviles",
+    response_model=list[UnidadMovilListResponse],
+    status_code=status.HTTP_200_OK,
+)
+def listar_unidades_moviles(
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return listar_unidades_moviles_service(db, current_user)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.get(
+    "/unidades-moviles/{id_unidad_movil}",
+    response_model=UnidadMovilDetailResponse,
+    status_code=status.HTTP_200_OK,
+)
+def obtener_unidad_movil(
+    id_unidad_movil: int,
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return obtener_unidad_movil_service(db, current_user, id_unidad_movil)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.post(
+    "/unidades-moviles",
+    response_model=UnidadMovilDetailResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def registrar_unidad_movil(
+    payload: UnidadMovilCreateRequest,
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return registrar_unidad_movil_service(db, current_user, payload)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.put(
+    "/unidades-moviles/{id_unidad_movil}",
+    response_model=UnidadMovilDetailResponse,
+    status_code=status.HTTP_200_OK,
+)
+def actualizar_unidad_movil(
+    id_unidad_movil: int,
+    payload: UnidadMovilUpdateRequest,
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return actualizar_unidad_movil_service(db, current_user, id_unidad_movil, payload)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.patch(
+    "/unidades-moviles/{id_unidad_movil}/disponibilidad",
+    response_model=UnidadMovilDetailResponse,
+    status_code=status.HTTP_200_OK,
+)
+def actualizar_estado_disponibilidad_unidad_movil(
+    id_unidad_movil: int,
+    payload: UnidadMovilEstadoDisponibilidadRequest,
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return actualizar_estado_disponibilidad_unidad_movil_service(
+            db,
+            current_user,
+            id_unidad_movil,
+            payload,
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
