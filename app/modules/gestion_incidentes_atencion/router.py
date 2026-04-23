@@ -10,6 +10,8 @@ from app.modules.gestion_incidentes_atencion.schemas import (
     AsignacionIncidenteRequest,
     AsignacionIncidenteResponse,
     EstadoServicioIncidenteResponse,
+    IncidenteAsignadoDetailResponse,
+    IncidenteAsignadoListResponse,
     IncidenteCreateRequest,
     IncidenteResponse,
     IncidenteDisponibleResponse,
@@ -24,8 +26,10 @@ from app.modules.gestion_incidentes_atencion.service import (
     asignar_tecnico_unidad_incidente_service,
     get_estado_servicio_incidente_service,
     get_mis_incidentes_service,
+    listar_incidentes_asignados_tecnico_service,
     listar_tecnicos_disponibles_para_incidente_service,
     listar_unidades_moviles_disponibles_para_incidente_service,
+    obtener_incidente_asignado_tecnico_service,
     get_solicitud_atencion_detalle_service,
     report_incidente_service,
     get_incidentes_disponibles_service,
@@ -238,6 +242,43 @@ def actualizar_estado_servicio_incidente(
             id_incidente,
             payload,
         )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.get(
+    "/tecnico/incidentes-asignados",
+    response_model=list[IncidenteAsignadoListResponse],
+    status_code=status.HTTP_200_OK,
+)
+def listar_incidentes_asignados_tecnico(
+    current_user: Usuario = Depends(require_roles("TECNICO")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return listar_incidentes_asignados_tecnico_service(db, current_user)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.get(
+    "/tecnico/incidentes-asignados/{id_incidente}",
+    response_model=IncidenteAsignadoDetailResponse,
+    status_code=status.HTTP_200_OK,
+)
+def obtener_incidente_asignado_tecnico(
+    id_incidente: int,
+    current_user: Usuario = Depends(require_roles("TECNICO")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return obtener_incidente_asignado_tecnico_service(db, current_user, id_incidente)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

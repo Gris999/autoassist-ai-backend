@@ -156,3 +156,51 @@ class ActualizacionEstadoServicioResponse(BaseModel):
     estado_nuevo: str
     fecha_hora: datetime
     detalle: str | None = None
+
+
+class EvidenciaIncidenteResponse(BaseModel):
+    id_evidencia: int
+    tipo_evidencia: str
+    archivo_url: str
+    texto_extraido: str | None = None
+    descripcion: str | None = None
+    fecha_registro: datetime
+
+
+class IncidenteAsignadoListResponse(BaseModel):
+    id_incidente: int
+    id_asignacion: int
+    titulo: str
+    descripcion_texto: str | None = None
+    direccion_referencia: str | None = None
+    fecha_reporte: datetime
+    tipo_incidente: str
+    prioridad: str
+    estado_servicio_actual: str
+    estado_asignacion: str
+
+
+class IncidenteAsignadoDetailResponse(BaseModel):
+    id_incidente: int
+    id_asignacion: int
+    id_taller: int
+    id_tecnico: int
+    id_unidad_movil: int | None = None
+    titulo: str
+    descripcion_texto: str | None = None
+    direccion_referencia: str | None = None
+    latitud: Decimal | None = None
+    longitud: Decimal | None = None
+    fecha_reporte: datetime
+    tipo_incidente: str
+    prioridad: str
+    estado_servicio_actual: str
+    estado_asignacion: str
+    tiempo_estimado_min: int | None = None
+    observaciones: str | None = None
+    placa_vehiculo: str
+    marca_vehiculo: str
+    modelo_vehiculo: str
+    color_vehiculo: str | None = None
+    tipo_vehiculo: str
+    evidencias: list[EvidenciaIncidenteResponse]

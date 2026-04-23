@@ -1,6 +1,9 @@
 from sqlalchemy.orm import Session
 
-from app.modules.gestion_operativa_taller_tecnico.repository import get_taller_by_usuario_id
+from app.modules.gestion_operativa_taller_tecnico.repository import (
+    get_taller_by_usuario_id,
+    get_tecnico_by_usuario_id,
+)
 from app.modules.gestion_clientes.repository import get_cliente_by_usuario_id
 from app.modules.gestion_incidentes_atencion.repository import (
     create_historial_incidente,
@@ -8,6 +11,8 @@ from app.modules.gestion_incidentes_atencion.repository import (
     create_incidente,
     get_asignacion_servicio_by_incidente_id,
     get_asignacion_servicio_by_incidente_id_for_update,
+    get_asignacion_servicio_detalle_by_incidente_and_tecnico_id,
+    get_asignaciones_servicio_by_tecnico_id,
     get_estado_servicio_by_id,
     get_incidente_by_id_for_update,
     get_incidente_by_id,
@@ -36,7 +41,10 @@ from app.modules.gestion_incidentes_atencion.schemas import (
     ActualizarEstadoServicioRequest,
     AsignacionIncidenteRequest,
     AsignacionIncidenteResponse,
+    EvidenciaIncidenteResponse,
     EstadoServicioIncidenteResponse,
+    IncidenteAsignadoDetailResponse,
+    IncidenteAsignadoListResponse,
     IncidenteCreateRequest,
     IncidenteResponse,
     IncidenteDisponibleResponse,
@@ -52,6 +60,7 @@ ESTADO_SOLICITUD_ACEPTADA = "ACEPTADA"
 ESTADO_SOLICITUD_RECHAZADA = "RECHAZADA"
 ESTADO_ASIGNACION_SERVICIO = "ASIGNADO"
 ESTADOS_FINALES_SERVICIO = {"FINALIZADO", "CANCELADO"}
+ESTADOS_CONSULTABLES_TECNICO = {"ASIGNADO", "EN_CAMINO", "EN_ATENCION", "FINALIZADO"}
 ESTADOS_INCIDENTE_NO_DISPONIBLE_RESPUESTA = {
     "ASIGNADO",
     "EN_CAMINO",
@@ -209,6 +218,15 @@ def _to_actualizacion_estado_servicio_response(
     )
 
 
+def _get_tecnico_actor_service(db: Session, current_user):
+    tecnico = get_tecnico_by_usuario_id(db, current_user.id_usuario)
+    if not tecnico:
+        raise ValueError("El usuario autenticado no tiene perfil de tecnico.")
+    if not tecnico.estado:
+        raise ValueError("El tecnico no se encuentra habilitado en la plataforma.")
+    return tecnico
+
+
 def _validar_incidente_aceptado_para_taller(db: Session, *, id_incidente: int, id_taller: int):
     incidente = get_incidente_by_id(db, id_incidente)
     if not incidente:
@@ -261,6 +279,75 @@ def _validar_transicion_estado_servicio(estado_actual, nuevo_estado) -> None:
 
     if nuevo_estado.orden_flujo != estado_actual.orden_flujo + 1:
         raise ValueError("La transicion de estado no es valida segun el flujo configurado.")
+
+
+def _validar_incidente_consultable_para_tecnico(incidente) -> None:
+    if incidente.estado_servicio_actual.nombre not in ESTADOS_CONSULTABLES_TECNICO:
+        raise ValueError("El incidente no se encuentra disponible para consulta en su estado actual.")
+
+
+def _to_evidencia_incidente_response(evidencia) -> EvidenciaIncidenteResponse:
+    return EvidenciaIncidenteResponse(
+        id_evidencia=evidencia.id_evidencia,
+        tipo_evidencia=evidencia.tipo_evidencia,
+        archivo_url=evidencia.archivo_url,
+        texto_extraido=evidencia.texto_extraido,
+        descripcion=evidencia.descripcion,
+        fecha_registro=evidencia.fecha_registro,
+    )
+
+
+def _to_incidente_asignado_list_response(
+    asignacion_servicio,
+) -> IncidenteAsignadoListResponse:
+    incidente = asignacion_servicio.incidente
+    return IncidenteAsignadoListResponse(
+        id_incidente=incidente.id_incidente,
+        id_asignacion=asignacion_servicio.id_asignacion,
+        titulo=incidente.titulo,
+        descripcion_texto=incidente.descripcion_texto,
+        direccion_referencia=incidente.direccion_referencia,
+        fecha_reporte=incidente.fecha_reporte,
+        tipo_incidente=incidente.tipo_incidente.nombre,
+        prioridad=incidente.prioridad.nombre,
+        estado_servicio_actual=incidente.estado_servicio_actual.nombre,
+        estado_asignacion=asignacion_servicio.estado_asignacion,
+    )
+
+
+def _to_incidente_asignado_detail_response(
+    asignacion_servicio,
+) -> IncidenteAsignadoDetailResponse:
+    incidente = asignacion_servicio.incidente
+    vehiculo = incidente.vehiculo
+    return IncidenteAsignadoDetailResponse(
+        id_incidente=incidente.id_incidente,
+        id_asignacion=asignacion_servicio.id_asignacion,
+        id_taller=asignacion_servicio.id_taller,
+        id_tecnico=asignacion_servicio.id_tecnico,
+        id_unidad_movil=asignacion_servicio.id_unidad_movil,
+        titulo=incidente.titulo,
+        descripcion_texto=incidente.descripcion_texto,
+        direccion_referencia=incidente.direccion_referencia,
+        latitud=incidente.latitud,
+        longitud=incidente.longitud,
+        fecha_reporte=incidente.fecha_reporte,
+        tipo_incidente=incidente.tipo_incidente.nombre,
+        prioridad=incidente.prioridad.nombre,
+        estado_servicio_actual=incidente.estado_servicio_actual.nombre,
+        estado_asignacion=asignacion_servicio.estado_asignacion,
+        tiempo_estimado_min=asignacion_servicio.tiempo_estimado_min,
+        observaciones=asignacion_servicio.observaciones,
+        placa_vehiculo=vehiculo.placa,
+        marca_vehiculo=vehiculo.marca,
+        modelo_vehiculo=vehiculo.modelo,
+        color_vehiculo=vehiculo.color,
+        tipo_vehiculo=vehiculo.tipo_vehiculo.nombre,
+        evidencias=[
+            _to_evidencia_incidente_response(evidencia)
+            for evidencia in incidente.evidencias
+        ],
+    )
 
 
 def report_incidente_service(
@@ -610,3 +697,42 @@ def actualizar_estado_servicio_incidente_service(
     except Exception:
         db.rollback()
         raise
+
+
+def listar_incidentes_asignados_tecnico_service(
+    db: Session,
+    current_user,
+) -> list[IncidenteAsignadoListResponse]:
+    tecnico = _get_tecnico_actor_service(db, current_user)
+    asignaciones = get_asignaciones_servicio_by_tecnico_id(db, tecnico.id_tecnico)
+
+    asignaciones_consultables = []
+    for asignacion in asignaciones:
+        try:
+            _validar_incidente_consultable_para_tecnico(asignacion.incidente)
+            asignaciones_consultables.append(asignacion)
+        except ValueError:
+            continue
+
+    return [
+        _to_incidente_asignado_list_response(asignacion)
+        for asignacion in asignaciones_consultables
+    ]
+
+
+def obtener_incidente_asignado_tecnico_service(
+    db: Session,
+    current_user,
+    id_incidente: int,
+) -> IncidenteAsignadoDetailResponse:
+    tecnico = _get_tecnico_actor_service(db, current_user)
+    asignacion = get_asignacion_servicio_detalle_by_incidente_and_tecnico_id(
+        db,
+        id_incidente=id_incidente,
+        id_tecnico=tecnico.id_tecnico,
+    )
+    if not asignacion:
+        raise ValueError("El incidente no existe o no pertenece al tecnico autenticado.")
+
+    _validar_incidente_consultable_para_tecnico(asignacion.incidente)
+    return _to_incidente_asignado_detail_response(asignacion)

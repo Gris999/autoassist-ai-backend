@@ -212,6 +212,48 @@ def get_asignacion_servicio_by_incidente_id(
     ).scalar_one_or_none()
 
 
+def get_asignaciones_servicio_by_tecnico_id(
+    db: Session,
+    id_tecnico: int,
+) -> list[AsignacionServicio]:
+    return list(
+        db.execute(
+            select(AsignacionServicio)
+            .options(
+                joinedload(AsignacionServicio.incidente).joinedload(Incidente.tipo_incidente),
+                joinedload(AsignacionServicio.incidente).joinedload(Incidente.prioridad),
+                joinedload(AsignacionServicio.incidente).joinedload(Incidente.estado_servicio_actual),
+            )
+            .where(AsignacionServicio.id_tecnico == id_tecnico)
+            .order_by(AsignacionServicio.fecha_asignacion.desc())
+        ).scalars()
+    )
+
+
+def get_asignacion_servicio_detalle_by_incidente_and_tecnico_id(
+    db: Session,
+    *,
+    id_incidente: int,
+    id_tecnico: int,
+) -> AsignacionServicio | None:
+    return db.execute(
+        select(AsignacionServicio)
+        .options(
+            joinedload(AsignacionServicio.incidente).joinedload(Incidente.tipo_incidente),
+            joinedload(AsignacionServicio.incidente).joinedload(Incidente.prioridad),
+            joinedload(AsignacionServicio.incidente).joinedload(Incidente.estado_servicio_actual),
+            joinedload(AsignacionServicio.incidente).joinedload(Incidente.evidencias),
+            joinedload(AsignacionServicio.incidente)
+            .joinedload(Incidente.vehiculo)
+            .joinedload(Vehiculo.tipo_vehiculo),
+        )
+        .where(
+            AsignacionServicio.id_incidente == id_incidente,
+            AsignacionServicio.id_tecnico == id_tecnico,
+        )
+    ).scalar_one_or_none()
+
+
 def get_asignacion_servicio_by_incidente_id_for_update(
     db: Session,
     id_incidente: int,
