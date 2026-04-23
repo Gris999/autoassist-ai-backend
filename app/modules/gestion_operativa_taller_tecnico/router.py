@@ -18,16 +18,20 @@ from app.modules.gestion_operativa_taller_tecnico.schemas import (
     TecnicoEspecialidadesUpdateRequest,
     TecnicoListResponse,
     TecnicoUpdateRequest,
+    TallerTiposVehiculoConfigRequest,
+    TallerTiposVehiculoConfigResponse,
     TallerAuxilioCreateRequest,
     TallerAuxilioResponse,
     TallerAuxilioUpdateRequest,
     TallerInfoResponse,
+    TipoVehiculoResponse,
 )
 from app.modules.gestion_operativa_taller_tecnico.service import (
     actualizar_disponibilidad_tecnico_service,
     actualizar_disponibilidad_taller_service,
     actualizar_especialidades_tecnico_service,
     actualizar_tecnico_service,
+    configurar_tipos_vehiculo_taller_service,
     deshabilitar_servicio_auxilio_service,
     deshabilitar_tecnico_service,
     habilitar_tecnico_service,
@@ -36,6 +40,8 @@ from app.modules.gestion_operativa_taller_tecnico.service import (
     listar_especialidades_disponibles_service,
     listar_especialidades_tecnico_service,
     listar_tecnicos_service,
+    listar_tipos_vehiculo_disponibles_service,
+    obtener_configuracion_tipos_vehiculo_taller_service,
     obtener_tecnico_service,
     obtener_disponibilidad_tecnico_service,
     obtener_disponibilidad_taller_service,
@@ -98,6 +104,61 @@ def actualizar_disponibilidad(
 ):
     try:
         return actualizar_disponibilidad_taller_service(db, current_user, payload)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.get(
+    "/tipos-vehiculo",
+    response_model=list[TipoVehiculoResponse],
+    status_code=status.HTTP_200_OK,
+)
+def listar_tipos_vehiculo_disponibles(
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return listar_tipos_vehiculo_disponibles_service(db, current_user)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.get(
+    "/configuracion/tipos-vehiculo",
+    response_model=TallerTiposVehiculoConfigResponse,
+    status_code=status.HTTP_200_OK,
+)
+def obtener_configuracion_tipos_vehiculo_taller(
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return obtener_configuracion_tipos_vehiculo_taller_service(db, current_user)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.put(
+    "/configuracion/tipos-vehiculo",
+    response_model=TallerTiposVehiculoConfigResponse,
+    status_code=status.HTTP_200_OK,
+)
+def configurar_tipos_vehiculo_taller(
+    payload: TallerTiposVehiculoConfigRequest,
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return configurar_tipos_vehiculo_taller_service(db, current_user, payload)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

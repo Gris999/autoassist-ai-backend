@@ -10,7 +10,9 @@ from app.modules.autenticacion_seguridad.repository import (
 from app.modules.gestion_operativa_taller_tecnico.repository import (
     create_tecnico,
     create_tecnico_especialidad,
+    create_taller_tipo_vehiculo,
     create_taller_auxilio,
+    delete_taller_tipos_vehiculo_by_ids,
     delete_tecnico_especialidades_by_ids,
     get_especialidades_by_ids,
     get_especialidades_disponibles,
@@ -19,11 +21,14 @@ from app.modules.gestion_operativa_taller_tecnico.repository import (
     get_taller_auxilio_by_taller_id_tipo_auxilio,
     get_taller_by_usuario_id,
     get_servicios_auxilio_por_taller_id,
+    get_taller_tipos_vehiculo_by_taller_id,
     get_tecnico_with_usuario_by_id,
     get_tecnicos_by_taller_id,
     get_tecnico_by_usuario_id,
     get_tecnico_especialidades_by_tecnico_id,
     get_talleres_disponibles,
+    get_tipos_vehiculo_by_ids,
+    get_tipos_vehiculo_disponibles,
     get_tipo_auxilio_by_id,
     set_disponibilidad_taller_auxilio,
     update_estado_tecnico,
@@ -46,10 +51,13 @@ from app.modules.gestion_operativa_taller_tecnico.schemas import (
     TecnicoEspecialidadesUpdateRequest,
     TecnicoListResponse,
     TecnicoUpdateRequest,
+    TallerTiposVehiculoConfigRequest,
+    TallerTiposVehiculoConfigResponse,
     TallerAuxilioCreateRequest,
     TallerAuxilioResponse,
     TallerAuxilioUpdateRequest,
     DisponibilidadTallerResponse,
+    TipoVehiculoResponse,
     TallerInfoResponse,
 )
 
@@ -141,6 +149,41 @@ def _to_tecnico_especialidades_response(
         especialidades=[
             _to_especialidad_response(tecnico_especialidad.especialidad)
             for tecnico_especialidad in tecnico_especialidades
+        ],
+    )
+
+
+def _validar_ids_tipo_vehiculo(ids_tipo_vehiculo: list[int]) -> None:
+    if any(id_tipo_vehiculo <= 0 for id_tipo_vehiculo in ids_tipo_vehiculo):
+        raise ValueError("Se enviaron ids de tipo de vehiculo invalidos.")
+    if len(set(ids_tipo_vehiculo)) != len(ids_tipo_vehiculo):
+        raise ValueError("No se permiten ids de tipo de vehiculo repetidos en la misma peticion.")
+
+
+def _obtener_tipos_vehiculo_validos(db: Session, ids_tipo_vehiculo: list[int]):
+    tipos_vehiculo = get_tipos_vehiculo_by_ids(db, ids_tipo_vehiculo)
+    if len(tipos_vehiculo) != len(set(ids_tipo_vehiculo)):
+        raise ValueError("Uno o mas tipos de vehiculo especificados no existen.")
+    return tipos_vehiculo
+
+
+def _to_tipo_vehiculo_response(tipo_vehiculo) -> TipoVehiculoResponse:
+    return TipoVehiculoResponse(
+        id_tipo_vehiculo=tipo_vehiculo.id_tipo_vehiculo,
+        nombre=tipo_vehiculo.nombre,
+        descripcion=tipo_vehiculo.descripcion,
+    )
+
+
+def _to_taller_tipos_vehiculo_config_response(
+    id_taller: int,
+    taller_tipos_vehiculo,
+) -> TallerTiposVehiculoConfigResponse:
+    return TallerTiposVehiculoConfigResponse(
+        id_taller=id_taller,
+        tipos_vehiculo=[
+            _to_tipo_vehiculo_response(taller_tipo_vehiculo.tipo_vehiculo)
+            for taller_tipo_vehiculo in taller_tipos_vehiculo
         ],
     )
 
@@ -508,6 +551,68 @@ def quitar_especialidad_tecnico_service(
         return _to_tecnico_especialidades_response(
             tecnico.id_tecnico,
             tecnico_especialidades_actualizadas,
+        )
+    except Exception:
+        db.rollback()
+        raise
+
+
+def listar_tipos_vehiculo_disponibles_service(
+    db: Session,
+    current_user,
+) -> list[TipoVehiculoResponse]:
+    _get_taller_gestor_service(db, current_user)
+    tipos_vehiculo = get_tipos_vehiculo_disponibles(db)
+    return [_to_tipo_vehiculo_response(tipo_vehiculo) for tipo_vehiculo in tipos_vehiculo]
+
+
+def obtener_configuracion_tipos_vehiculo_taller_service(
+    db: Session,
+    current_user,
+) -> TallerTiposVehiculoConfigResponse:
+    taller = _get_taller_gestor_service(db, current_user)
+    taller_tipos_vehiculo = get_taller_tipos_vehiculo_by_taller_id(db, taller.id_taller)
+    return _to_taller_tipos_vehiculo_config_response(taller.id_taller, taller_tipos_vehiculo)
+
+
+def configurar_tipos_vehiculo_taller_service(
+    db: Session,
+    current_user,
+    payload: TallerTiposVehiculoConfigRequest,
+) -> TallerTiposVehiculoConfigResponse:
+    _validar_ids_tipo_vehiculo(payload.ids_tipo_vehiculo)
+    taller = _get_taller_gestor_service(db, current_user)
+    _obtener_tipos_vehiculo_validos(db, payload.ids_tipo_vehiculo)
+
+    taller_tipos_vehiculo_actuales = get_taller_tipos_vehiculo_by_taller_id(db, taller.id_taller)
+    ids_actuales = {item.id_tipo_vehiculo for item in taller_tipos_vehiculo_actuales}
+    ids_nuevos = set(payload.ids_tipo_vehiculo)
+    ids_a_quitar = list(ids_actuales - ids_nuevos)
+    ids_a_agregar = [
+        id_tipo_vehiculo
+        for id_tipo_vehiculo in payload.ids_tipo_vehiculo
+        if id_tipo_vehiculo not in ids_actuales
+    ]
+
+    try:
+        delete_taller_tipos_vehiculo_by_ids(
+            db,
+            id_taller=taller.id_taller,
+            ids_tipo_vehiculo=ids_a_quitar,
+        )
+
+        for id_tipo_vehiculo in ids_a_agregar:
+            create_taller_tipo_vehiculo(
+                db,
+                id_taller=taller.id_taller,
+                id_tipo_vehiculo=id_tipo_vehiculo,
+            )
+
+        db.commit()
+        taller_tipos_vehiculo_actualizados = get_taller_tipos_vehiculo_by_taller_id(db, taller.id_taller)
+        return _to_taller_tipos_vehiculo_config_response(
+            taller.id_taller,
+            taller_tipos_vehiculo_actualizados,
         )
     except Exception:
         db.rollback()

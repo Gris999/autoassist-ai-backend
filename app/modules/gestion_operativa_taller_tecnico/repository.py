@@ -2,6 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.modules.autenticacion_seguridad.models import Usuario
+from app.modules.gestion_clientes.models import TipoVehiculo
 from app.modules.gestion_incidentes_atencion.models import (
     AsignacionServicio,
     EstadoServicio,
@@ -13,6 +14,7 @@ from app.modules.gestion_operativa_taller_tecnico.models import (
     TallerAuxilio,
     Tecnico,
     TecnicoEspecialidad,
+    TallerTipoVehiculo,
     TipoAuxilio,
 )
 
@@ -332,6 +334,76 @@ def delete_tecnico_especialidades_by_ids(
 
     for tecnico_especialidad in tecnico_especialidades:
         db.delete(tecnico_especialidad)
+
+    db.flush()
+
+
+def get_tipos_vehiculo_disponibles(db: Session) -> list[TipoVehiculo]:
+    return list(
+        db.execute(
+            select(TipoVehiculo).order_by(TipoVehiculo.nombre.asc())
+        ).scalars()
+    )
+
+
+def get_tipos_vehiculo_by_ids(db: Session, ids_tipo_vehiculo: list[int]) -> list[TipoVehiculo]:
+    if not ids_tipo_vehiculo:
+        return []
+    return list(
+        db.execute(
+            select(TipoVehiculo).where(TipoVehiculo.id_tipo_vehiculo.in_(ids_tipo_vehiculo))
+        ).scalars()
+    )
+
+
+def get_taller_tipos_vehiculo_by_taller_id(
+    db: Session,
+    id_taller: int,
+) -> list[TallerTipoVehiculo]:
+    return list(
+        db.execute(
+            select(TallerTipoVehiculo)
+            .options(joinedload(TallerTipoVehiculo.tipo_vehiculo))
+            .where(TallerTipoVehiculo.id_taller == id_taller)
+            .order_by(TallerTipoVehiculo.id_taller_tipo_vehiculo.asc())
+        ).scalars()
+    )
+
+
+def create_taller_tipo_vehiculo(
+    db: Session,
+    *,
+    id_taller: int,
+    id_tipo_vehiculo: int,
+) -> TallerTipoVehiculo:
+    taller_tipo_vehiculo = TallerTipoVehiculo(
+        id_taller=id_taller,
+        id_tipo_vehiculo=id_tipo_vehiculo,
+    )
+    db.add(taller_tipo_vehiculo)
+    db.flush()
+    db.refresh(taller_tipo_vehiculo)
+    return taller_tipo_vehiculo
+
+
+def delete_taller_tipos_vehiculo_by_ids(
+    db: Session,
+    *,
+    id_taller: int,
+    ids_tipo_vehiculo: list[int],
+) -> None:
+    if not ids_tipo_vehiculo:
+        return
+
+    taller_tipos_vehiculo = db.execute(
+        select(TallerTipoVehiculo).where(
+            TallerTipoVehiculo.id_taller == id_taller,
+            TallerTipoVehiculo.id_tipo_vehiculo.in_(ids_tipo_vehiculo),
+        )
+    ).scalars().all()
+
+    for taller_tipo_vehiculo in taller_tipos_vehiculo:
+        db.delete(taller_tipo_vehiculo)
 
     db.flush()
 

@@ -164,3 +164,20 @@ class TecnicoEspecialidadesAssignRequest(BaseModel):
 
 class TecnicoEspecialidadesUpdateRequest(BaseModel):
     ids_especialidad: list[int] = Field(default_factory=list)
+
+
+class TipoVehiculoResponse(BaseModel):
+    id_tipo_vehiculo: int
+    nombre: str
+    descripcion: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TallerTiposVehiculoConfigResponse(BaseModel):
+    id_taller: int
+    tipos_vehiculo: list[TipoVehiculoResponse]
+
+
+class TallerTiposVehiculoConfigRequest(BaseModel):
+    ids_tipo_vehiculo: list[int] = Field(min_length=1)
