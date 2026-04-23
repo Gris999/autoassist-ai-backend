@@ -5,7 +5,9 @@ from app.core.db.session import get_db
 from app.modules.autenticacion_seguridad.models import Usuario
 from app.modules.autenticacion_seguridad.permissions import require_roles
 from app.modules.gestion_operativa_taller_tecnico.schemas import (
+    ActualizarDisponibilidadTecnicoRequest,
     ActualizarDisponibilidadTallerRequest,
+    DisponibilidadTecnicoResponse,
     DisponibilidadTallerResponse,
     TallerAuxilioCreateRequest,
     TallerAuxilioResponse,
@@ -13,9 +15,11 @@ from app.modules.gestion_operativa_taller_tecnico.schemas import (
     TallerInfoResponse,
 )
 from app.modules.gestion_operativa_taller_tecnico.service import (
+    actualizar_disponibilidad_tecnico_service,
     actualizar_disponibilidad_taller_service,
     deshabilitar_servicio_auxilio_service,
     listar_servicios_auxilio_service,
+    obtener_disponibilidad_tecnico_service,
     obtener_disponibilidad_taller_service,
     obtener_informacion_taller_service,
     obtener_talleres_disponibles_service,
@@ -74,6 +78,43 @@ def actualizar_disponibilidad(
 ):
     try:
         return actualizar_disponibilidad_taller_service(db, current_user, payload)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.get(
+    "/tecnico/disponibilidad",
+    response_model=DisponibilidadTecnicoResponse,
+    status_code=status.HTTP_200_OK,
+)
+def obtener_disponibilidad_tecnico(
+    current_user: Usuario = Depends(require_roles("TECNICO")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return obtener_disponibilidad_tecnico_service(db, current_user)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.put(
+    "/tecnico/disponibilidad",
+    response_model=DisponibilidadTecnicoResponse,
+    status_code=status.HTTP_200_OK,
+)
+def actualizar_disponibilidad_tecnico(
+    payload: ActualizarDisponibilidadTecnicoRequest,
+    current_user: Usuario = Depends(require_roles("TECNICO")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return actualizar_disponibilidad_tecnico_service(db, current_user, payload)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

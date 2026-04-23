@@ -2,18 +2,23 @@ from sqlalchemy.orm import Session
 
 from app.modules.gestion_operativa_taller_tecnico.repository import (
     create_taller_auxilio,
+    get_asignacion_activa_by_tecnico_id,
     get_taller_auxilio_by_id,
     get_taller_auxilio_by_taller_id_tipo_auxilio,
     get_taller_by_usuario_id,
     get_servicios_auxilio_por_taller_id,
+    get_tecnico_by_usuario_id,
     get_talleres_disponibles,
     get_tipo_auxilio_by_id,
     set_disponibilidad_taller_auxilio,
+    update_disponibilidad_tecnico,
     update_disponibilidad_taller,
     update_taller_auxilio,
 )
 from app.modules.gestion_operativa_taller_tecnico.schemas import (
+    ActualizarDisponibilidadTecnicoRequest,
     ActualizarDisponibilidadTallerRequest,
+    DisponibilidadTecnicoResponse,
     TallerAuxilioCreateRequest,
     TallerAuxilioResponse,
     TallerAuxilioUpdateRequest,
@@ -74,6 +79,52 @@ def obtener_informacion_taller_service(
         raise ValueError("El usuario autenticado no tiene perfil de taller.")
 
     return TallerInfoResponse.model_validate(taller)
+
+
+def obtener_disponibilidad_tecnico_service(
+    db: Session,
+    current_user,
+) -> DisponibilidadTecnicoResponse:
+    tecnico = get_tecnico_by_usuario_id(db, current_user.id_usuario)
+    if not tecnico:
+        raise ValueError("El usuario autenticado no tiene perfil de tecnico.")
+    if not tecnico.estado:
+        raise ValueError("El tecnico no se encuentra habilitado en el sistema.")
+
+    return DisponibilidadTecnicoResponse.model_validate(tecnico)
+
+
+def actualizar_disponibilidad_tecnico_service(
+    db: Session,
+    current_user,
+    payload: ActualizarDisponibilidadTecnicoRequest,
+) -> DisponibilidadTecnicoResponse:
+    tecnico = get_tecnico_by_usuario_id(db, current_user.id_usuario)
+    if not tecnico:
+        raise ValueError("El usuario autenticado no tiene perfil de tecnico.")
+    if not tecnico.estado:
+        raise ValueError("El tecnico no se encuentra habilitado en el sistema.")
+
+    asignacion_activa = get_asignacion_activa_by_tecnico_id(db, tecnico.id_tecnico)
+    if payload.disponible and asignacion_activa:
+        raise ValueError(
+            "El tecnico tiene una asignacion activa y no puede marcarse como disponible."
+        )
+
+    try:
+        tecnico_actualizado = update_disponibilidad_tecnico(
+            db,
+            id_tecnico=tecnico.id_tecnico,
+            disponible=payload.disponible,
+        )
+
+        db.commit()
+        db.refresh(tecnico_actualizado)
+
+        return DisponibilidadTecnicoResponse.model_validate(tecnico_actualizado)
+    except Exception:
+        db.rollback()
+        raise
 
 
 def listar_servicios_auxilio_service(

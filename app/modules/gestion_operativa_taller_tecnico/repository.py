@@ -1,9 +1,15 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.modules.gestion_incidentes_atencion.models import (
+    AsignacionServicio,
+    EstadoServicio,
+    Incidente,
+)
 from app.modules.gestion_operativa_taller_tecnico.models import (
     Taller,
     TallerAuxilio,
+    Tecnico,
     TipoAuxilio,
 )
 
@@ -125,3 +131,60 @@ def set_disponibilidad_taller_auxilio(
     db.flush()
     db.refresh(taller_auxilio)
     return taller_auxilio
+
+
+def get_tecnico_by_usuario_id(db: Session, id_usuario: int) -> Tecnico | None:
+    return db.execute(
+        select(Tecnico).where(Tecnico.id_usuario == id_usuario)
+    ).scalar_one_or_none()
+
+
+def get_tecnico_by_id(db: Session, id_tecnico: int) -> Tecnico | None:
+    return db.execute(
+        select(Tecnico).where(Tecnico.id_tecnico == id_tecnico)
+    ).scalar_one_or_none()
+
+
+def update_disponibilidad_tecnico(
+    db: Session,
+    *,
+    id_tecnico: int,
+    disponible: bool,
+) -> Tecnico:
+    tecnico = get_tecnico_by_id(db, id_tecnico)
+    if tecnico:
+        tecnico.disponible = disponible
+        db.flush()
+        db.refresh(tecnico)
+    return tecnico
+
+
+def get_tecnicos_disponibles(db: Session) -> list[Tecnico]:
+    return list(
+        db.execute(
+            select(Tecnico).where(Tecnico.disponible == True, Tecnico.estado == True)
+        ).scalars()
+    )
+
+
+def get_asignacion_activa_by_tecnico_id(
+    db: Session,
+    id_tecnico: int,
+) -> AsignacionServicio | None:
+    return (
+        db.execute(
+            select(AsignacionServicio)
+            .join(Incidente, AsignacionServicio.id_incidente == Incidente.id_incidente)
+            .join(
+                EstadoServicio,
+                Incidente.id_estado_servicio_actual == EstadoServicio.id_estado_servicio,
+            )
+            .where(
+                AsignacionServicio.id_tecnico == id_tecnico,
+                EstadoServicio.nombre.notin_(["FINALIZADO", "CANCELADO"]),
+            )
+            .order_by(AsignacionServicio.fecha_asignacion.desc())
+        )
+        .scalars()
+        .first()
+    )

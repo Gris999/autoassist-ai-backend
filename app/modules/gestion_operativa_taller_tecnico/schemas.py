@@ -55,3 +55,31 @@ class TallerAuxilioResponse(BaseModel):
     disponible: bool
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ActualizarDisponibilidadTecnicoRequest(BaseModel):
+    disponible: bool = Field(description="Indicar si el técnico está disponible")
+
+
+class DisponibilidadTecnicoResponse(BaseModel):
+    id_tecnico: int
+    id_usuario: int
+    disponible: bool
+    estado: bool
+    latitud_actual: float | None = None
+    longitud_actual: float | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TecnicoInfoResponse(BaseModel):
+    id_tecnico: int
+    id_usuario: int
+    id_taller: int
+    telefono_contacto: str
+    disponible: bool
+    estado: bool
+    latitud_actual: float | None = None
+    longitud_actual: float | None = None
+
+    model_config = ConfigDict(from_attributes=True)
