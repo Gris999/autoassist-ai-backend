@@ -24,3 +24,34 @@ class VehiculoResponse(BaseModel):
     estado: bool
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class CalificacionServicioCreateRequest(BaseModel):
+    id_incidente: int
+    puntuacion: float = Field(ge=1.0, le=5.0)
+    comentario: str | None = Field(default=None, max_length=500)
+
+
+class CalificacionServicioResponse(BaseModel):
+    id_calificacion: int
+    id_incidente: int
+    id_cliente: int
+    id_taller: int
+    id_tecnico: int | None
+    puntuacion: float
+    comentario: str | None
+    fecha_calificacion: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ServicioPendienteCalificacionResponse(BaseModel):
+    id_incidente: int
+    titulo: str
+    fecha_reporte: str
+    id_taller: int
+    nombre_taller: str
+    id_tecnico: int | None
+    nombre_tecnico: str | None
+
+    model_config = ConfigDict(from_attributes=True)
