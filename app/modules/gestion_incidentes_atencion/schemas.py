@@ -91,3 +91,43 @@ class RespuestaSolicitudAtencionResponse(BaseModel):
     fecha_respuesta: datetime
     id_estado_servicio_actual: int
     estado_servicio_actual: str
+
+
+class TecnicoDisponibleAsignacionResponse(BaseModel):
+    id_tecnico: int
+    id_usuario: int
+    nombres: str
+    apellidos: str
+    telefono_contacto: str
+    disponible: bool
+    estado: bool
+
+
+class UnidadMovilDisponibleAsignacionResponse(BaseModel):
+    id_unidad_movil: int
+    id_taller: int
+    placa: str
+    tipo_unidad: str
+    disponible: bool
+    estado: bool
+
+
+class AsignacionIncidenteRequest(BaseModel):
+    id_tecnico: int
+    id_unidad_movil: int
+    tiempo_estimado_min: int | None = Field(default=None, ge=0)
+    observaciones: str | None = Field(default=None, max_length=2000)
+
+
+class AsignacionIncidenteResponse(BaseModel):
+    id_asignacion: int
+    id_incidente: int
+    id_taller: int
+    id_tecnico: int
+    id_unidad_movil: int | None = None
+    fecha_asignacion: datetime
+    tiempo_estimado_min: int | None = None
+    estado_asignacion: str
+    observaciones: str | None = None
+    id_estado_servicio_actual: int
+    estado_servicio_actual: str

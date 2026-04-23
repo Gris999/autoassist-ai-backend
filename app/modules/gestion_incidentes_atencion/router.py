@@ -5,15 +5,22 @@ from app.core.db.session import get_db
 from app.modules.autenticacion_seguridad.models import Usuario
 from app.modules.autenticacion_seguridad.permissions import require_roles
 from app.modules.gestion_incidentes_atencion.schemas import (
+    AsignacionIncidenteRequest,
+    AsignacionIncidenteResponse,
     IncidenteCreateRequest,
     IncidenteResponse,
     IncidenteDisponibleResponse,
     ResponderSolicitudAtencionRequest,
     RespuestaSolicitudAtencionResponse,
     SolicitudAtencionDetalleResponse,
+    TecnicoDisponibleAsignacionResponse,
+    UnidadMovilDisponibleAsignacionResponse,
 )
 from app.modules.gestion_incidentes_atencion.service import (
+    asignar_tecnico_unidad_incidente_service,
     get_mis_incidentes_service,
+    listar_tecnicos_disponibles_para_incidente_service,
+    listar_unidades_moviles_disponibles_para_incidente_service,
     get_solicitud_atencion_detalle_service,
     report_incidente_service,
     get_incidentes_disponibles_service,
@@ -113,6 +120,73 @@ def responder_solicitud_atencion(
             db,
             current_user,
             id_solicitud_taller,
+            payload,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.get(
+    "/taller/incidentes/{id_incidente}/tecnicos-disponibles",
+    response_model=list[TecnicoDisponibleAsignacionResponse],
+    status_code=status.HTTP_200_OK,
+)
+def listar_tecnicos_disponibles_para_incidente(
+    id_incidente: int,
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return listar_tecnicos_disponibles_para_incidente_service(db, current_user, id_incidente)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.get(
+    "/taller/incidentes/{id_incidente}/unidades-moviles-disponibles",
+    response_model=list[UnidadMovilDisponibleAsignacionResponse],
+    status_code=status.HTTP_200_OK,
+)
+def listar_unidades_moviles_disponibles_para_incidente(
+    id_incidente: int,
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return listar_unidades_moviles_disponibles_para_incidente_service(
+            db,
+            current_user,
+            id_incidente,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.post(
+    "/taller/incidentes/{id_incidente}/asignacion",
+    response_model=AsignacionIncidenteResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def asignar_tecnico_unidad_incidente(
+    id_incidente: int,
+    payload: AsignacionIncidenteRequest,
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return asignar_tecnico_unidad_incidente_service(
+            db,
+            current_user,
+            id_incidente,
             payload,
         )
     except ValueError as e:

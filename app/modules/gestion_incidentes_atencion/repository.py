@@ -5,12 +5,14 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.modules.gestion_clientes.models import Vehiculo
 from app.modules.gestion_incidentes_atencion.models import (
+    AsignacionServicio,
     EstadoServicio,
     Incidente,
     Prioridad,
     SolicitudTaller,
     TipoIncidente,
 )
+from app.modules.gestion_operativa_taller_tecnico.models import Tecnico, UnidadMovil
 
 
 def get_tipo_incidente_by_id(db: Session, id_tipo_incidente: int) -> TipoIncidente | None:
@@ -176,6 +178,87 @@ def get_solicitud_aceptada_by_incidente_id(
     ).scalar_one_or_none()
 
 
+def get_solicitud_aceptada_by_incidente_and_taller_id(
+    db: Session,
+    *,
+    id_incidente: int,
+    id_taller: int,
+) -> SolicitudTaller | None:
+    return db.execute(
+        select(SolicitudTaller).where(
+            SolicitudTaller.id_incidente == id_incidente,
+            SolicitudTaller.id_taller == id_taller,
+            SolicitudTaller.estado_solicitud == "ACEPTADA",
+        )
+    ).scalar_one_or_none()
+
+
+def get_asignacion_servicio_by_incidente_id(
+    db: Session,
+    id_incidente: int,
+) -> AsignacionServicio | None:
+    return db.execute(
+        select(AsignacionServicio).where(AsignacionServicio.id_incidente == id_incidente)
+    ).scalar_one_or_none()
+
+
+def get_asignacion_servicio_by_incidente_id_for_update(
+    db: Session,
+    id_incidente: int,
+) -> AsignacionServicio | None:
+    return db.execute(
+        select(AsignacionServicio)
+        .where(AsignacionServicio.id_incidente == id_incidente)
+        .with_for_update()
+    ).scalar_one_or_none()
+
+
+def get_tecnicos_disponibles_by_taller_id(db: Session, id_taller: int) -> list[Tecnico]:
+    return list(
+        db.execute(
+            select(Tecnico)
+            .options(joinedload(Tecnico.usuario))
+            .where(
+                Tecnico.id_taller == id_taller,
+                Tecnico.disponible == True,
+                Tecnico.estado == True,
+            )
+            .order_by(Tecnico.id_tecnico.asc())
+        ).scalars()
+    )
+
+
+def get_unidades_moviles_disponibles_by_taller_id(db: Session, id_taller: int) -> list[UnidadMovil]:
+    return list(
+        db.execute(
+            select(UnidadMovil)
+            .where(
+                UnidadMovil.id_taller == id_taller,
+                UnidadMovil.disponible == True,
+                UnidadMovil.estado == True,
+            )
+            .order_by(UnidadMovil.id_unidad_movil.asc())
+        ).scalars()
+    )
+
+
+def get_tecnico_by_id_for_update(db: Session, id_tecnico: int) -> Tecnico | None:
+    return db.execute(
+        select(Tecnico)
+        .options(joinedload(Tecnico.usuario))
+        .where(Tecnico.id_tecnico == id_tecnico)
+        .with_for_update()
+    ).scalar_one_or_none()
+
+
+def get_unidad_movil_by_id_for_update(db: Session, id_unidad_movil: int) -> UnidadMovil | None:
+    return db.execute(
+        select(UnidadMovil)
+        .where(UnidadMovil.id_unidad_movil == id_unidad_movil)
+        .with_for_update()
+    ).scalar_one_or_none()
+
+
 def update_solicitud_taller_respuesta(
     db: Session,
     solicitud_taller: SolicitudTaller,
@@ -199,3 +282,53 @@ def update_incidente_estado_servicio_actual(
     db.flush()
     db.refresh(incidente)
     return incidente
+
+
+def create_asignacion_servicio(
+    db: Session,
+    *,
+    id_incidente: int,
+    id_taller: int,
+    id_tecnico: int,
+    id_unidad_movil: int | None,
+    tiempo_estimado_min: int | None,
+    estado_asignacion: str,
+    observaciones: str | None,
+) -> AsignacionServicio:
+    asignacion = AsignacionServicio(
+        id_incidente=id_incidente,
+        id_taller=id_taller,
+        id_tecnico=id_tecnico,
+        id_unidad_movil=id_unidad_movil,
+        tiempo_estimado_min=tiempo_estimado_min,
+        estado_asignacion=estado_asignacion,
+        observaciones=observaciones,
+    )
+    db.add(asignacion)
+    db.flush()
+    db.refresh(asignacion)
+    return asignacion
+
+
+def update_tecnico_disponibilidad(
+    db: Session,
+    tecnico: Tecnico,
+    *,
+    disponible: bool,
+) -> Tecnico:
+    tecnico.disponible = disponible
+    db.flush()
+    db.refresh(tecnico)
+    return tecnico
+
+
+def update_unidad_movil_disponibilidad(
+    db: Session,
+    unidad_movil: UnidadMovil,
+    *,
+    disponible: bool,
+) -> UnidadMovil:
+    unidad_movil.disponible = disponible
+    db.flush()
+    db.refresh(unidad_movil)
+    return unidad_movil
