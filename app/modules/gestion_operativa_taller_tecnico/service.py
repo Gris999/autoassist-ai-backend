@@ -1,30 +1,104 @@
 from sqlalchemy.orm import Session
 
+from app.core.security.security import hash_password
+from app.modules.autenticacion_seguridad.repository import (
+    assign_rol_to_usuario,
+    create_usuario,
+    get_rol_by_nombre,
+    get_usuario_by_email,
+)
 from app.modules.gestion_operativa_taller_tecnico.repository import (
+    create_tecnico,
     create_taller_auxilio,
     get_asignacion_activa_by_tecnico_id,
     get_taller_auxilio_by_id,
     get_taller_auxilio_by_taller_id_tipo_auxilio,
     get_taller_by_usuario_id,
     get_servicios_auxilio_por_taller_id,
+    get_tecnico_with_usuario_by_id,
+    get_tecnicos_by_taller_id,
     get_tecnico_by_usuario_id,
     get_talleres_disponibles,
     get_tipo_auxilio_by_id,
     set_disponibilidad_taller_auxilio,
+    update_estado_tecnico,
     update_disponibilidad_tecnico,
     update_disponibilidad_taller,
     update_taller_auxilio,
+    update_tecnico,
+    update_usuario_tecnico,
 )
 from app.modules.gestion_operativa_taller_tecnico.schemas import (
     ActualizarDisponibilidadTecnicoRequest,
     ActualizarDisponibilidadTallerRequest,
     DisponibilidadTecnicoResponse,
+    TecnicoCreateRequest,
+    TecnicoDetailResponse,
+    TecnicoEstadoResponse,
+    TecnicoListResponse,
+    TecnicoUpdateRequest,
     TallerAuxilioCreateRequest,
     TallerAuxilioResponse,
     TallerAuxilioUpdateRequest,
     DisponibilidadTallerResponse,
     TallerInfoResponse,
 )
+
+
+def _get_taller_gestor_service(db: Session, current_user):
+    taller = get_taller_by_usuario_id(db, current_user.id_usuario)
+    if not taller:
+        raise ValueError("El usuario autenticado no tiene perfil de taller.")
+    return taller
+
+
+def _validar_tecnico_del_taller(db: Session, id_tecnico: int, id_taller: int):
+    tecnico = get_tecnico_with_usuario_by_id(db, id_tecnico)
+    if not tecnico:
+        raise ValueError("El tecnico especificado no existe.")
+    if tecnico.id_taller != id_taller:
+        raise ValueError("El tecnico no pertenece al taller autenticado.")
+    return tecnico
+
+
+def _to_tecnico_list_response(tecnico) -> TecnicoListResponse:
+    return TecnicoListResponse(
+        id_tecnico=tecnico.id_tecnico,
+        id_usuario=tecnico.id_usuario,
+        nombres=tecnico.usuario.nombres,
+        apellidos=tecnico.usuario.apellidos,
+        email=tecnico.usuario.email,
+        celular=tecnico.usuario.celular,
+        telefono_contacto=tecnico.telefono_contacto,
+        disponible=tecnico.disponible,
+        estado=tecnico.estado,
+    )
+
+
+def _to_tecnico_detail_response(tecnico) -> TecnicoDetailResponse:
+    return TecnicoDetailResponse(
+        id_tecnico=tecnico.id_tecnico,
+        id_usuario=tecnico.id_usuario,
+        id_taller=tecnico.id_taller,
+        nombres=tecnico.usuario.nombres,
+        apellidos=tecnico.usuario.apellidos,
+        email=tecnico.usuario.email,
+        celular=tecnico.usuario.celular,
+        telefono_contacto=tecnico.telefono_contacto,
+        disponible=tecnico.disponible,
+        estado=tecnico.estado,
+        latitud_actual=float(tecnico.latitud_actual) if tecnico.latitud_actual is not None else None,
+        longitud_actual=float(tecnico.longitud_actual) if tecnico.longitud_actual is not None else None,
+    )
+
+
+def _to_tecnico_estado_response(tecnico) -> TecnicoEstadoResponse:
+    return TecnicoEstadoResponse(
+        id_tecnico=tecnico.id_tecnico,
+        id_usuario=tecnico.id_usuario,
+        estado=tecnico.estado,
+        disponible=tecnico.disponible,
+    )
 
 
 def obtener_disponibilidad_taller_service(
@@ -79,6 +153,186 @@ def obtener_informacion_taller_service(
         raise ValueError("El usuario autenticado no tiene perfil de taller.")
 
     return TallerInfoResponse.model_validate(taller)
+
+
+def listar_tecnicos_service(
+    db: Session,
+    current_user,
+) -> list[TecnicoListResponse]:
+    taller = _get_taller_gestor_service(db, current_user)
+    tecnicos = get_tecnicos_by_taller_id(db, taller.id_taller)
+    return [_to_tecnico_list_response(tecnico) for tecnico in tecnicos]
+
+
+def obtener_tecnico_service(
+    db: Session,
+    current_user,
+    id_tecnico: int,
+) -> TecnicoDetailResponse:
+    taller = _get_taller_gestor_service(db, current_user)
+    tecnico = _validar_tecnico_del_taller(db, id_tecnico, taller.id_taller)
+    return _to_tecnico_detail_response(tecnico)
+
+
+def registrar_tecnico_service(
+    db: Session,
+    current_user,
+    payload: TecnicoCreateRequest,
+) -> TecnicoDetailResponse:
+    taller = _get_taller_gestor_service(db, current_user)
+
+    existing_user = get_usuario_by_email(db, payload.email)
+    if existing_user:
+        raise ValueError("Ya existe un usuario registrado con ese email.")
+
+    rol_tecnico = get_rol_by_nombre(db, "TECNICO")
+    if not rol_tecnico:
+        raise ValueError("No existe el rol TECNICO en la base de datos.")
+
+    try:
+        usuario = create_usuario(
+            db,
+            nombres=payload.nombres,
+            apellidos=payload.apellidos,
+            celular=payload.celular,
+            email=payload.email,
+            password_hash=hash_password(payload.password),
+        )
+
+        if not payload.estado:
+            update_usuario_tecnico(
+                db,
+                usuario,
+                estado=False,
+            )
+
+        assign_rol_to_usuario(
+            db,
+            id_usuario=usuario.id_usuario,
+            id_rol=rol_tecnico.id_rol,
+        )
+
+        tecnico = create_tecnico(
+            db,
+            id_usuario=usuario.id_usuario,
+            id_taller=taller.id_taller,
+            telefono_contacto=payload.telefono_contacto,
+            disponible=payload.disponible if payload.estado else False,
+            estado=payload.estado,
+        )
+
+        db.commit()
+        tecnico = get_tecnico_with_usuario_by_id(db, tecnico.id_tecnico)
+        return _to_tecnico_detail_response(tecnico)
+    except Exception:
+        db.rollback()
+        raise
+
+
+def actualizar_tecnico_service(
+    db: Session,
+    current_user,
+    id_tecnico: int,
+    payload: TecnicoUpdateRequest,
+) -> TecnicoDetailResponse:
+    taller = _get_taller_gestor_service(db, current_user)
+    tecnico = _validar_tecnico_del_taller(db, id_tecnico, taller.id_taller)
+
+    if (
+        payload.nombres is None
+        and payload.apellidos is None
+        and payload.celular is None
+        and payload.email is None
+        and payload.telefono_contacto is None
+        and payload.disponible is None
+    ):
+        raise ValueError("Debe indicar al menos un campo para actualizar.")
+
+    if payload.email is not None:
+        existing_user = get_usuario_by_email(db, payload.email)
+        if existing_user and existing_user.id_usuario != tecnico.id_usuario:
+            raise ValueError("Ya existe un usuario registrado con ese email.")
+
+    if payload.disponible is True and not tecnico.estado:
+        raise ValueError("No se puede marcar como disponible un tecnico deshabilitado.")
+
+    try:
+        update_usuario_tecnico(
+            db,
+            tecnico.usuario,
+            nombres=payload.nombres,
+            apellidos=payload.apellidos,
+            celular=payload.celular,
+            email=payload.email,
+        )
+
+        update_tecnico(
+            db,
+            tecnico,
+            telefono_contacto=payload.telefono_contacto,
+            disponible=payload.disponible,
+        )
+
+        db.commit()
+        tecnico_actualizado = get_tecnico_with_usuario_by_id(db, tecnico.id_tecnico)
+        return _to_tecnico_detail_response(tecnico_actualizado)
+    except Exception:
+        db.rollback()
+        raise
+
+
+def habilitar_tecnico_service(
+    db: Session,
+    current_user,
+    id_tecnico: int,
+) -> TecnicoEstadoResponse:
+    taller = _get_taller_gestor_service(db, current_user)
+    tecnico = _validar_tecnico_del_taller(db, id_tecnico, taller.id_taller)
+
+    try:
+        update_usuario_tecnico(
+            db,
+            tecnico.usuario,
+            estado=True,
+        )
+        tecnico_actualizado = update_estado_tecnico(
+            db,
+            tecnico,
+            estado=True,
+        )
+        db.commit()
+        db.refresh(tecnico_actualizado)
+        return _to_tecnico_estado_response(tecnico_actualizado)
+    except Exception:
+        db.rollback()
+        raise
+
+
+def deshabilitar_tecnico_service(
+    db: Session,
+    current_user,
+    id_tecnico: int,
+) -> TecnicoEstadoResponse:
+    taller = _get_taller_gestor_service(db, current_user)
+    tecnico = _validar_tecnico_del_taller(db, id_tecnico, taller.id_taller)
+
+    try:
+        update_usuario_tecnico(
+            db,
+            tecnico.usuario,
+            estado=False,
+        )
+        tecnico_actualizado = update_estado_tecnico(
+            db,
+            tecnico,
+            estado=False,
+        )
+        db.commit()
+        db.refresh(tecnico_actualizado)
+        return _to_tecnico_estado_response(tecnico_actualizado)
+    except Exception:
+        db.rollback()
+        raise
 
 
 def obtener_disponibilidad_tecnico_service(

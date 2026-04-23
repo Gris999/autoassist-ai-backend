@@ -9,6 +9,11 @@ from app.modules.gestion_operativa_taller_tecnico.schemas import (
     ActualizarDisponibilidadTallerRequest,
     DisponibilidadTecnicoResponse,
     DisponibilidadTallerResponse,
+    TecnicoCreateRequest,
+    TecnicoDetailResponse,
+    TecnicoEstadoResponse,
+    TecnicoListResponse,
+    TecnicoUpdateRequest,
     TallerAuxilioCreateRequest,
     TallerAuxilioResponse,
     TallerAuxilioUpdateRequest,
@@ -17,12 +22,18 @@ from app.modules.gestion_operativa_taller_tecnico.schemas import (
 from app.modules.gestion_operativa_taller_tecnico.service import (
     actualizar_disponibilidad_tecnico_service,
     actualizar_disponibilidad_taller_service,
+    actualizar_tecnico_service,
     deshabilitar_servicio_auxilio_service,
+    deshabilitar_tecnico_service,
+    habilitar_tecnico_service,
     listar_servicios_auxilio_service,
+    listar_tecnicos_service,
+    obtener_tecnico_service,
     obtener_disponibilidad_tecnico_service,
     obtener_disponibilidad_taller_service,
     obtener_informacion_taller_service,
     obtener_talleres_disponibles_service,
+    registrar_tecnico_service,
     registrar_servicio_auxilio_service,
     actualizar_servicio_auxilio_service,
 )
@@ -78,6 +89,120 @@ def actualizar_disponibilidad(
 ):
     try:
         return actualizar_disponibilidad_taller_service(db, current_user, payload)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.get(
+    "/tecnicos",
+    response_model=list[TecnicoListResponse],
+    status_code=status.HTTP_200_OK,
+)
+def listar_tecnicos(
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return listar_tecnicos_service(db, current_user)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.get(
+    "/tecnicos/{id_tecnico}",
+    response_model=TecnicoDetailResponse,
+    status_code=status.HTTP_200_OK,
+)
+def obtener_tecnico(
+    id_tecnico: int,
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return obtener_tecnico_service(db, current_user, id_tecnico)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.post(
+    "/tecnicos",
+    response_model=TecnicoDetailResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def registrar_tecnico(
+    payload: TecnicoCreateRequest,
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return registrar_tecnico_service(db, current_user, payload)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.put(
+    "/tecnicos/{id_tecnico}",
+    response_model=TecnicoDetailResponse,
+    status_code=status.HTTP_200_OK,
+)
+def actualizar_tecnico(
+    id_tecnico: int,
+    payload: TecnicoUpdateRequest,
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return actualizar_tecnico_service(db, current_user, id_tecnico, payload)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.patch(
+    "/tecnicos/{id_tecnico}/habilitar",
+    response_model=TecnicoEstadoResponse,
+    status_code=status.HTTP_200_OK,
+)
+def habilitar_tecnico(
+    id_tecnico: int,
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return habilitar_tecnico_service(db, current_user, id_tecnico)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.patch(
+    "/tecnicos/{id_tecnico}/deshabilitar",
+    response_model=TecnicoEstadoResponse,
+    status_code=status.HTTP_200_OK,
+)
+def deshabilitar_tecnico(
+    id_tecnico: int,
+    current_user: Usuario = Depends(require_roles("TALLER")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return deshabilitar_tecnico_service(db, current_user, id_tecnico)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

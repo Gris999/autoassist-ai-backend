@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class ActualizarDisponibilidadTallerRequest(BaseModel):
@@ -81,5 +81,65 @@ class TecnicoInfoResponse(BaseModel):
     estado: bool
     latitud_actual: float | None = None
     longitud_actual: float | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TecnicoCreateRequest(BaseModel):
+    nombres: str = Field(min_length=2, max_length=100)
+    apellidos: str = Field(min_length=2, max_length=100)
+    celular: str = Field(min_length=7, max_length=20)
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=128)
+    telefono_contacto: str = Field(min_length=7, max_length=20)
+    disponible: bool = True
+    estado: bool = True
+
+
+class TecnicoUpdateRequest(BaseModel):
+    nombres: str | None = Field(default=None, min_length=2, max_length=100)
+    apellidos: str | None = Field(default=None, min_length=2, max_length=100)
+    celular: str | None = Field(default=None, min_length=7, max_length=20)
+    email: EmailStr | None = None
+    telefono_contacto: str | None = Field(default=None, min_length=7, max_length=20)
+    disponible: bool | None = None
+
+
+class TecnicoListResponse(BaseModel):
+    id_tecnico: int
+    id_usuario: int
+    nombres: str
+    apellidos: str
+    email: EmailStr
+    celular: str
+    telefono_contacto: str
+    disponible: bool
+    estado: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TecnicoDetailResponse(BaseModel):
+    id_tecnico: int
+    id_usuario: int
+    id_taller: int
+    nombres: str
+    apellidos: str
+    email: EmailStr
+    celular: str
+    telefono_contacto: str
+    disponible: bool
+    estado: bool
+    latitud_actual: float | None = None
+    longitud_actual: float | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TecnicoEstadoResponse(BaseModel):
+    id_tecnico: int
+    id_usuario: int
+    estado: bool
+    disponible: bool
 
     model_config = ConfigDict(from_attributes=True)

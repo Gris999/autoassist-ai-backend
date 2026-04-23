@@ -1,6 +1,7 @@
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
+from app.modules.autenticacion_seguridad.models import Usuario
 from app.modules.gestion_incidentes_atencion.models import (
     AsignacionServicio,
     EstadoServicio,
@@ -145,6 +146,25 @@ def get_tecnico_by_id(db: Session, id_tecnico: int) -> Tecnico | None:
     ).scalar_one_or_none()
 
 
+def get_tecnicos_by_taller_id(db: Session, id_taller: int) -> list[Tecnico]:
+    return list(
+        db.execute(
+            select(Tecnico)
+            .options(joinedload(Tecnico.usuario))
+            .where(Tecnico.id_taller == id_taller)
+            .order_by(Tecnico.id_tecnico.desc())
+        ).scalars()
+    )
+
+
+def get_tecnico_with_usuario_by_id(db: Session, id_tecnico: int) -> Tecnico | None:
+    return db.execute(
+        select(Tecnico)
+        .options(joinedload(Tecnico.usuario))
+        .where(Tecnico.id_tecnico == id_tecnico)
+    ).scalar_one_or_none()
+
+
 def update_disponibilidad_tecnico(
     db: Session,
     *,
@@ -165,6 +185,83 @@ def get_tecnicos_disponibles(db: Session) -> list[Tecnico]:
             select(Tecnico).where(Tecnico.disponible == True, Tecnico.estado == True)
         ).scalars()
     )
+
+
+def create_tecnico(
+    db: Session,
+    *,
+    id_usuario: int,
+    id_taller: int,
+    telefono_contacto: str,
+    disponible: bool,
+    estado: bool,
+) -> Tecnico:
+    tecnico = Tecnico(
+        id_usuario=id_usuario,
+        id_taller=id_taller,
+        telefono_contacto=telefono_contacto,
+        disponible=disponible,
+        estado=estado,
+    )
+    db.add(tecnico)
+    db.flush()
+    db.refresh(tecnico)
+    return tecnico
+
+
+def update_usuario_tecnico(
+    db: Session,
+    usuario: Usuario,
+    *,
+    nombres: str | None = None,
+    apellidos: str | None = None,
+    celular: str | None = None,
+    email: str | None = None,
+    estado: bool | None = None,
+) -> Usuario:
+    if nombres is not None:
+        usuario.nombres = nombres
+    if apellidos is not None:
+        usuario.apellidos = apellidos
+    if celular is not None:
+        usuario.celular = celular
+    if email is not None:
+        usuario.email = email
+    if estado is not None:
+        usuario.estado = estado
+    db.flush()
+    db.refresh(usuario)
+    return usuario
+
+
+def update_tecnico(
+    db: Session,
+    tecnico: Tecnico,
+    *,
+    telefono_contacto: str | None = None,
+    disponible: bool | None = None,
+) -> Tecnico:
+    if telefono_contacto is not None:
+        tecnico.telefono_contacto = telefono_contacto
+    if disponible is not None:
+        tecnico.disponible = disponible
+    db.flush()
+    db.refresh(tecnico)
+    return tecnico
+
+
+def update_estado_tecnico(
+    db: Session,
+    tecnico: Tecnico,
+    *,
+    estado: bool,
+) -> Tecnico:
+    tecnico.estado = estado
+    if not estado:
+        tecnico.disponible = False
+    db.flush()
+    db.refresh(tecnico)
+    return tecnico
 
 
 def get_asignacion_activa_by_tecnico_id(
