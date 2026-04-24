@@ -19,10 +19,52 @@ def get_usuario_by_email(db: Session, email: str) -> Usuario | None:
     ).scalar_one_or_none()
 
 
+def get_usuario_by_id(db: Session, id_usuario: int) -> Usuario | None:
+    return db.execute(
+        select(Usuario).where(Usuario.id_usuario == id_usuario)
+    ).scalar_one_or_none()
+
+
+def get_usuario_with_roles_by_id(db: Session, id_usuario: int) -> Usuario | None:
+    return db.execute(
+        select(Usuario)
+        .options(joinedload(Usuario.usuario_roles).joinedload(UsuarioRol.rol))
+        .where(Usuario.id_usuario == id_usuario)
+    ).unique().scalar_one_or_none()
+
+
+def get_usuarios_with_roles(db: Session) -> list[Usuario]:
+    return list(
+        db.execute(
+            select(Usuario)
+            .options(joinedload(Usuario.usuario_roles).joinedload(UsuarioRol.rol))
+            .order_by(Usuario.id_usuario.asc())
+        ).unique().scalars()
+    )
+
+
 def get_rol_by_nombre(db: Session, nombre: str) -> Rol | None:
     return db.execute(
         select(Rol).where(Rol.nombre == nombre)
     ).scalar_one_or_none()
+
+
+def get_roles(db: Session) -> list[Rol]:
+    return list(
+        db.execute(
+            select(Rol).order_by(Rol.nombre.asc())
+        ).scalars()
+    )
+
+
+def get_roles_by_nombres(db: Session, nombres: list[str]) -> list[Rol]:
+    if not nombres:
+        return []
+    return list(
+        db.execute(
+            select(Rol).where(Rol.nombre.in_(nombres))
+        ).scalars()
+    )
 
 
 def get_tipo_taller_by_id(db: Session, id_tipo_taller: int) -> TipoTaller | None:
@@ -118,6 +160,17 @@ def get_roles_by_usuario_id(db: Session, id_usuario: int) -> list[str]:
         .join(UsuarioRol, UsuarioRol.id_rol == Rol.id_rol)
         .where(UsuarioRol.id_usuario == id_usuario)
     ).scalars().all()
+
+
+def delete_usuario_roles_by_usuario_id(db: Session, id_usuario: int) -> None:
+    usuario_roles = db.execute(
+        select(UsuarioRol).where(UsuarioRol.id_usuario == id_usuario)
+    ).scalars().all()
+
+    for usuario_rol in usuario_roles:
+        db.delete(usuario_rol)
+
+    db.flush()
 
 
 def create_bitacora_sistema(

@@ -115,3 +115,24 @@ class BitacoraSistemaDetailResponse(BaseModel):
     modulo: str
     descripcion: str | None = None
     ip_origen: str | None = None
+
+
+class UsuarioRolesListResponse(BaseModel):
+    id_usuario: int
+    nombres: str
+    apellidos: str
+    celular: str
+    email: EmailStr
+    estado: bool
+    fecha_registro: datetime
+    roles: list[str]
+
+
+class UsuarioRolesUpdateRequest(BaseModel):
+    roles: list[str] = Field(min_length=1)
+
+
+class UsuarioRolesUpdateResponse(BaseModel):
+    id_usuario: int
+    roles: list[str]
+    mensaje: str

@@ -12,15 +12,22 @@ from app.modules.autenticacion_seguridad.schemas import (
     BitacoraSistemaResponse,
     LoginRequest,
     LogoutResponse,
+    RolResponse,
     RegistroClienteRequest,
     RegistroClienteResponse,
     RegistroTallerRequest,
     RegistroTallerResponse,
     TokenResponse,
+    UsuarioRolesListResponse,
+    UsuarioRolesUpdateRequest,
+    UsuarioRolesUpdateResponse,
         UsuarioMeResponse,
 )
 from app.modules.autenticacion_seguridad.service import (
+    actualizar_roles_usuario_service,
     listar_bitacora_sistema_service,
+    listar_roles_service,
+    listar_usuarios_roles_service,
     logout_service,
     login_service,
     obtener_bitacora_sistema_service,
@@ -165,5 +172,56 @@ def obtener_bitacora(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+
+
+@router.get(
+    "/roles",
+    response_model=list[RolResponse],
+    status_code=status.HTTP_200_OK,
+)
+def listar_roles(
+    current_user: Usuario = Depends(require_roles("ADMIN", "SUPERADMIN")),
+    db: Session = Depends(get_db),
+):
+    return listar_roles_service(db)
+
+
+@router.get(
+    "/usuarios-roles",
+    response_model=list[UsuarioRolesListResponse],
+    status_code=status.HTTP_200_OK,
+)
+def listar_usuarios_roles(
+    current_user: Usuario = Depends(require_roles("ADMIN", "SUPERADMIN")),
+    db: Session = Depends(get_db),
+):
+    return listar_usuarios_roles_service(db)
+
+
+@router.patch(
+    "/usuarios/{id_usuario}/roles",
+    response_model=UsuarioRolesUpdateResponse,
+    status_code=status.HTTP_200_OK,
+)
+def actualizar_roles_usuario(
+    id_usuario: int,
+    payload: UsuarioRolesUpdateRequest,
+    request: Request,
+    current_user: Usuario = Depends(require_roles("ADMIN", "SUPERADMIN")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return actualizar_roles_usuario_service(
+            db,
+            current_user,
+            id_usuario,
+            payload,
+            ip_origen=request.client.host if request.client else None,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
         )
