@@ -23,3 +23,11 @@ class AnalisisIncidenteResponse(PreguntasSugeridasResponse):
     prioridad: str
     resumen_ia: str
     requiere_mas_info: bool
+
+
+class SolicitudMasInformacionResponse(PreguntasSugeridasResponse):
+    id_incidente: int
+    id_usuario_destino: int
+    solicitud_emitida: bool
+    mensaje: str
+    id_notificacion: int | None = None

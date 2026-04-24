@@ -5,11 +5,16 @@ from app.core.db.session import get_db
 from app.modules.inteligencia_gestion_estrategica.schemas import (
     AnalisisIncidenteManualRequest,
     AnalisisIncidenteResponse,
+    SolicitudMasInformacionResponse,
 )
 from app.modules.inteligencia_gestion_estrategica.service import (
+    IncidentClientNotFoundError,
+    IncidentDoesNotRequireMoreInformationError,
     IncidentNotFoundError,
+    IncidentUserNotFoundError,
     analizar_incidente_manual_service,
     analizar_incidente_por_id_service,
+    solicitar_mas_informacion_incidente_service,
 )
 
 router = APIRouter(
@@ -65,4 +70,36 @@ def analizar_incidente_por_id(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Ocurrio un error inesperado durante el analisis o guardado del incidente.",
+        ) from exc
+
+
+@router.post(
+    "/incidentes/{id_incidente}/solicitar-mas-informacion",
+    response_model=SolicitudMasInformacionResponse,
+    status_code=status.HTTP_200_OK,
+)
+def solicitar_mas_informacion_incidente(
+    id_incidente: int,
+    db: Session = Depends(get_db),
+):
+    try:
+        return solicitar_mas_informacion_incidente_service(db, id_incidente)
+    except (
+        IncidentNotFoundError,
+        IncidentClientNotFoundError,
+        IncidentUserNotFoundError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except IncidentDoesNotRequireMoreInformationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Ocurrio un error inesperado al emitir la solicitud de mas informacion.",
         ) from exc

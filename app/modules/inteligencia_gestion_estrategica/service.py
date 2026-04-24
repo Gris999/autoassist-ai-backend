@@ -4,13 +4,18 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.modules.inteligencia_gestion_estrategica.repository import (
+    create_notification,
+    get_cliente_by_id,
     get_evidencia_textos_by_incidente_id,
     get_incidente_by_id,
+    get_pending_notification_by_incidente_usuario_tipo,
+    get_usuario_by_id,
     update_incidente_analysis_result,
 )
 from app.modules.inteligencia_gestion_estrategica.schemas import (
     AnalisisIncidenteManualRequest,
     AnalisisIncidenteResponse,
+    SolicitudMasInformacionResponse,
 )
 
 
@@ -120,6 +125,18 @@ QUESTIONS_BY_CATEGORY: dict[str, list[str]] = {
 
 
 class IncidentNotFoundError(LookupError):
+    pass
+
+
+class IncidentDoesNotRequireMoreInformationError(ValueError):
+    pass
+
+
+class IncidentClientNotFoundError(LookupError):
+    pass
+
+
+class IncidentUserNotFoundError(LookupError):
     pass
 
 
@@ -247,6 +264,13 @@ def _suggest_questions(category: str, requires_more_info: bool) -> list[str]:
     return QUESTIONS_BY_CATEGORY.get(category, QUESTIONS_BY_CATEGORY["incierto"])
 
 
+def _get_questions_for_incident_classification(clasificacion_ia: str | None) -> list[str]:
+    normalized_category = (clasificacion_ia or "").strip().lower()
+    if not normalized_category or normalized_category not in QUESTIONS_BY_CATEGORY:
+        normalized_category = "incierto"
+    return QUESTIONS_BY_CATEGORY[normalized_category]
+
+
 def _run_incident_analysis(
     *,
     id_incidente: int | None,
@@ -332,6 +356,84 @@ def analizar_incidente_por_id_service(
         )
         db.commit()
         return analysis
+    except Exception:
+        db.rollback()
+        raise
+
+
+def solicitar_mas_informacion_incidente_service(
+    db: Session,
+    id_incidente: int,
+) -> SolicitudMasInformacionResponse:
+    incidente = get_incidente_by_id(db, id_incidente)
+    if not incidente:
+        raise IncidentNotFoundError("Incidente no encontrado.")
+
+    if not incidente.requiere_mas_info:
+        raise IncidentDoesNotRequireMoreInformationError(
+            "El incidente ya cuenta con informacion suficiente."
+        )
+
+    cliente = get_cliente_by_id(db, incidente.id_cliente)
+    if not cliente:
+        raise IncidentClientNotFoundError(
+            "No existe cliente asociado al incidente."
+        )
+
+    usuario = get_usuario_by_id(db, cliente.id_usuario)
+    if not usuario:
+        raise IncidentUserNotFoundError(
+            "No existe usuario asociado al incidente."
+        )
+
+    preguntas_sugeridas = _get_questions_for_incident_classification(
+        incidente.clasificacion_ia
+    )
+    mensaje_base = (
+        "Se requiere informacion adicional para analizar correctamente el incidente."
+    )
+    mensaje_notificacion = (
+        mensaje_base
+        + " Preguntas sugeridas: "
+        + " ".join(preguntas_sugeridas)
+    )
+
+    existing_notification = get_pending_notification_by_incidente_usuario_tipo(
+        db,
+        id_incidente=incidente.id_incidente,
+        id_usuario=usuario.id_usuario,
+        tipo_notificacion="SOLICITUD_MAS_INFORMACION",
+    )
+    if existing_notification:
+        return SolicitudMasInformacionResponse(
+            id_incidente=incidente.id_incidente,
+            id_usuario_destino=usuario.id_usuario,
+            solicitud_emitida=False,
+            mensaje=(
+                "Ya existe una solicitud pendiente de mas informacion para este incidente."
+            ),
+            preguntas_sugeridas=preguntas_sugeridas,
+            id_notificacion=existing_notification.id_notificacion,
+        )
+
+    try:
+        notification = create_notification(
+            db,
+            id_usuario=usuario.id_usuario,
+            id_incidente=incidente.id_incidente,
+            titulo="Solicitud de mas informacion del incidente",
+            mensaje=mensaje_notificacion,
+            tipo_notificacion="SOLICITUD_MAS_INFORMACION",
+        )
+        db.commit()
+        return SolicitudMasInformacionResponse(
+            id_incidente=incidente.id_incidente,
+            id_usuario_destino=usuario.id_usuario,
+            solicitud_emitida=True,
+            mensaje=mensaje_base,
+            preguntas_sugeridas=preguntas_sugeridas,
+            id_notificacion=notification.id_notificacion,
+        )
     except Exception:
         db.rollback()
         raise
