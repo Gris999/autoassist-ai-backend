@@ -7,6 +7,7 @@ from app.core.security.security import (
     hash_password,
     verify_password,
 )
+from app.modules.autenticacion_seguridad.models import Usuario
 from app.modules.autenticacion_seguridad.repository import (
     assign_rol_to_usuario,
     delete_usuario_roles_by_usuario_id,
@@ -18,6 +19,7 @@ from app.modules.autenticacion_seguridad.repository import (
     create_taller,
     get_rol_by_nombre,
     get_roles,
+    get_tipos_taller,
     get_roles_by_nombres,
     get_usuario_by_id,
     get_usuario_with_roles_by_id,
@@ -37,6 +39,7 @@ from app.modules.autenticacion_seguridad.schemas import (
     RegistroTallerRequest,
     RegistroTallerResponse,
     TokenResponse,
+    TipoTallerCatalogResponse,
     UsuarioRolesListResponse,
     UsuarioRolesUpdateRequest,
     UsuarioRolesUpdateResponse,
@@ -301,6 +304,11 @@ def _to_usuario_roles_list_response(usuario: Usuario) -> UsuarioRolesListRespons
 def listar_roles_service(db: Session) -> list[RolResponse]:
     roles = get_roles(db)
     return [RolResponse.model_validate(rol) for rol in roles]
+
+
+def listar_tipos_taller_service(db: Session) -> list[TipoTallerCatalogResponse]:
+    tipos_taller = get_tipos_taller(db)
+    return [TipoTallerCatalogResponse.model_validate(tipo) for tipo in tipos_taller]
 
 
 def listar_usuarios_roles_service(db: Session) -> list[UsuarioRolesListResponse]:

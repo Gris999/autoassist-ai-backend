@@ -18,6 +18,7 @@ from app.modules.autenticacion_seguridad.schemas import (
     RegistroTallerRequest,
     RegistroTallerResponse,
     TokenResponse,
+    TipoTallerCatalogResponse,
     UsuarioRolesListResponse,
     UsuarioRolesUpdateRequest,
     UsuarioRolesUpdateResponse,
@@ -27,6 +28,7 @@ from app.modules.autenticacion_seguridad.service import (
     actualizar_roles_usuario_service,
     listar_bitacora_sistema_service,
     listar_roles_service,
+    listar_tipos_taller_service,
     listar_usuarios_roles_service,
     logout_service,
     login_service,
@@ -174,6 +176,17 @@ def obtener_bitacora(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
+
+
+@router.get(
+    "/tipos-taller",
+    response_model=list[TipoTallerCatalogResponse],
+    status_code=status.HTTP_200_OK,
+)
+def listar_tipos_taller(
+    db: Session = Depends(get_db),
+):
+    return listar_tipos_taller_service(db)
 
 
 @router.get(
