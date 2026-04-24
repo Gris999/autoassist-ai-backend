@@ -1,5 +1,7 @@
+from datetime import datetime
+
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.modules.autenticacion_seguridad.models import (
     BitacoraSistema,
@@ -138,3 +140,43 @@ def create_bitacora_sistema(
     db.flush()
     db.refresh(bitacora)
     return bitacora
+
+
+def get_bitacora_sistema(
+    db: Session,
+    *,
+    fecha_inicio: datetime | None = None,
+    fecha_fin: datetime | None = None,
+    id_usuario: int | None = None,
+    modulo: str | None = None,
+    accion: str | None = None,
+) -> list[BitacoraSistema]:
+    query = (
+        select(BitacoraSistema)
+        .options(joinedload(BitacoraSistema.usuario))
+        .order_by(BitacoraSistema.fecha_hora.desc(), BitacoraSistema.id_bitacora.desc())
+    )
+
+    if fecha_inicio is not None:
+        query = query.where(BitacoraSistema.fecha_hora >= fecha_inicio)
+    if fecha_fin is not None:
+        query = query.where(BitacoraSistema.fecha_hora <= fecha_fin)
+    if id_usuario is not None:
+        query = query.where(BitacoraSistema.id_usuario == id_usuario)
+    if modulo:
+        query = query.where(BitacoraSistema.modulo.ilike(f"%{modulo}%"))
+    if accion:
+        query = query.where(BitacoraSistema.accion.ilike(f"%{accion}%"))
+
+    return list(db.execute(query).scalars())
+
+
+def get_bitacora_sistema_by_id(
+    db: Session,
+    id_bitacora: int,
+) -> BitacoraSistema | None:
+    return db.execute(
+        select(BitacoraSistema)
+        .options(joinedload(BitacoraSistema.usuario))
+        .where(BitacoraSistema.id_bitacora == id_bitacora)
+    ).scalar_one_or_none()

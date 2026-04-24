@@ -87,3 +87,31 @@ class UsuarioMeResponse(BaseModel):
 class LogoutResponse(BaseModel):
     message: str
     invalidacion_servidor: bool
+
+
+class BitacoraUsuarioResponse(BaseModel):
+    id_usuario: int
+    nombres: str
+    apellidos: str
+    email: EmailStr
+
+
+class BitacoraSistemaResponse(BaseModel):
+    id_bitacora: int
+    fecha_hora: datetime
+    usuario: BitacoraUsuarioResponse | None = None
+    accion: str
+    modulo: str
+    descripcion: str | None = None
+    ip_origen: str | None = None
+
+
+class BitacoraSistemaDetailResponse(BaseModel):
+    id_bitacora: int
+    id_usuario: int | None = None
+    fecha_hora: datetime
+    usuario: BitacoraUsuarioResponse | None = None
+    accion: str
+    modulo: str
+    descripcion: str | None = None
+    ip_origen: str | None = None

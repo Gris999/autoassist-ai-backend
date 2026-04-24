@@ -1,10 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 from app.modules.autenticacion_seguridad.models import Usuario
+from app.modules.autenticacion_seguridad.permissions import require_roles
 from app.shared.dependencies.auth import get_current_user
 
 from app.core.db.session import get_db
 from app.modules.autenticacion_seguridad.schemas import (
+    BitacoraSistemaDetailResponse,
+    BitacoraSistemaResponse,
     LoginRequest,
     LogoutResponse,
     RegistroClienteRequest,
@@ -15,8 +20,10 @@ from app.modules.autenticacion_seguridad.schemas import (
         UsuarioMeResponse,
 )
 from app.modules.autenticacion_seguridad.service import (
+    listar_bitacora_sistema_service,
     logout_service,
     login_service,
+    obtener_bitacora_sistema_service,
     register_cliente_service,
     register_taller_service,
         get_me_service,
@@ -109,5 +116,54 @@ def logout(
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.get(
+    "/bitacora",
+    response_model=list[BitacoraSistemaResponse],
+    status_code=status.HTTP_200_OK,
+)
+def listar_bitacora(
+    fecha_inicio: datetime | None = Query(default=None),
+    fecha_fin: datetime | None = Query(default=None),
+    id_usuario: int | None = Query(default=None, ge=1),
+    modulo: str | None = Query(default=None),
+    accion: str | None = Query(default=None),
+    current_user: Usuario = Depends(require_roles("ADMIN", "SUPERADMIN")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return listar_bitacora_sistema_service(
+            db,
+            fecha_inicio=fecha_inicio,
+            fecha_fin=fecha_fin,
+            id_usuario=id_usuario,
+            modulo=modulo,
+            accion=accion,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.get(
+    "/bitacora/{id_bitacora}",
+    response_model=BitacoraSistemaDetailResponse,
+    status_code=status.HTTP_200_OK,
+)
+def obtener_bitacora(
+    id_bitacora: int,
+    current_user: Usuario = Depends(require_roles("ADMIN", "SUPERADMIN")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return obtener_bitacora_sistema_service(db, id_bitacora)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )

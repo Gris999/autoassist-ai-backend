@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from sqlalchemy.orm import Session
 
 from app.core.security.security import (
@@ -7,6 +9,8 @@ from app.core.security.security import (
 )
 from app.modules.autenticacion_seguridad.repository import (
     assign_rol_to_usuario,
+    get_bitacora_sistema,
+    get_bitacora_sistema_by_id,
     create_bitacora_sistema,
     create_usuario,
     create_cliente,
@@ -18,6 +22,8 @@ from app.modules.autenticacion_seguridad.repository import (
 )
 from app.modules.autenticacion_seguridad.schemas import (
     LoginRequest,
+    BitacoraSistemaDetailResponse,
+    BitacoraSistemaResponse,
     RegistroClienteRequest,
     RegistroClienteResponse,
     LogoutResponse,
@@ -26,6 +32,7 @@ from app.modules.autenticacion_seguridad.schemas import (
     TokenResponse,
     UsuarioResponse,
     UsuarioMeResponse,
+    BitacoraUsuarioResponse,
 )
 
 
@@ -197,3 +204,72 @@ def logout_service(
         ),
         invalidacion_servidor=False,
     )
+
+
+def _to_bitacora_usuario_response(usuario) -> BitacoraUsuarioResponse | None:
+    if not usuario:
+        return None
+    return BitacoraUsuarioResponse(
+        id_usuario=usuario.id_usuario,
+        nombres=usuario.nombres,
+        apellidos=usuario.apellidos,
+        email=usuario.email,
+    )
+
+
+def _to_bitacora_sistema_response(bitacora) -> BitacoraSistemaResponse:
+    return BitacoraSistemaResponse(
+        id_bitacora=bitacora.id_bitacora,
+        fecha_hora=bitacora.fecha_hora,
+        usuario=_to_bitacora_usuario_response(bitacora.usuario),
+        accion=bitacora.accion,
+        modulo=bitacora.modulo,
+        descripcion=bitacora.descripcion,
+        ip_origen=bitacora.ip_origen,
+    )
+
+
+def _to_bitacora_sistema_detail_response(bitacora) -> BitacoraSistemaDetailResponse:
+    return BitacoraSistemaDetailResponse(
+        id_bitacora=bitacora.id_bitacora,
+        id_usuario=bitacora.id_usuario,
+        fecha_hora=bitacora.fecha_hora,
+        usuario=_to_bitacora_usuario_response(bitacora.usuario),
+        accion=bitacora.accion,
+        modulo=bitacora.modulo,
+        descripcion=bitacora.descripcion,
+        ip_origen=bitacora.ip_origen,
+    )
+
+
+def listar_bitacora_sistema_service(
+    db: Session,
+    *,
+    fecha_inicio: datetime | None = None,
+    fecha_fin: datetime | None = None,
+    id_usuario: int | None = None,
+    modulo: str | None = None,
+    accion: str | None = None,
+) -> list[BitacoraSistemaResponse]:
+    if fecha_inicio and fecha_fin and fecha_fin < fecha_inicio:
+        raise ValueError("El rango de fechas es inconsistente.")
+
+    bitacoras = get_bitacora_sistema(
+        db,
+        fecha_inicio=fecha_inicio,
+        fecha_fin=fecha_fin,
+        id_usuario=id_usuario,
+        modulo=modulo,
+        accion=accion,
+    )
+    return [_to_bitacora_sistema_response(bitacora) for bitacora in bitacoras]
+
+
+def obtener_bitacora_sistema_service(
+    db: Session,
+    id_bitacora: int,
+) -> BitacoraSistemaDetailResponse:
+    bitacora = get_bitacora_sistema_by_id(db, id_bitacora)
+    if not bitacora:
+        raise ValueError("El registro de bitacora no existe.")
+    return _to_bitacora_sistema_detail_response(bitacora)
