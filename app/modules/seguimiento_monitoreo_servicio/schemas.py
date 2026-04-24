@@ -78,3 +78,38 @@ class AsignacionAuxilioDetalleResponse(BaseModel):
     placa_vehiculo: str | None = None
     marca_vehiculo: str | None = None
     modelo_vehiculo: str | None = None
+
+
+class NotificacionCreateRequest(BaseModel):
+    id_usuario: int
+    id_incidente: int | None = None
+    titulo: str
+    mensaje: str
+    tipo_notificacion: str
+
+
+class NotificacionListResponse(BaseModel):
+    id_notificacion: int
+    id_incidente: int | None = None
+    titulo: str
+    mensaje: str
+    tipo_notificacion: str
+    leido: bool
+    fecha_envio: datetime
+
+
+class NotificacionDetailResponse(BaseModel):
+    id_notificacion: int
+    id_usuario: int
+    id_incidente: int | None = None
+    titulo: str
+    mensaje: str
+    tipo_notificacion: str
+    leido: bool
+    fecha_envio: datetime
+
+
+class NotificacionLeidaResponse(BaseModel):
+    id_notificacion: int
+    leido: bool
+    mensaje: str

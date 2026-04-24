@@ -1,17 +1,28 @@
 from sqlalchemy.orm import Session
 
 from app.modules.gestion_clientes.repository import get_cliente_by_usuario_id
+from app.modules.seguimiento_monitoreo_servicio.models import Notificacion
 from app.modules.seguimiento_monitoreo_servicio.schemas import (
     AsignacionAuxilioDetalleResponse,
     ClienteIncidenteListResponse,
     EstadoServicioDetalleResponse,
+    NotificacionCreateRequest,
+    NotificacionDetailResponse,
+    NotificacionLeidaResponse,
+    NotificacionListResponse,
     TallerAsignadoResponse,
     TecnicoAsignadoResponse,
     UnidadMovilAsignadaResponse,
 )
 from app.modules.seguimiento_monitoreo_servicio.repository import (
+    create_notificacion,
     get_incidente_asignacion_by_id_and_cliente,
     get_incidentes_by_cliente_id,
+    get_incidente_by_id,
+    get_notificacion_by_id_and_usuario,
+    get_notificaciones_by_usuario_id,
+    get_usuario_by_id,
+    update_notificacion_leido,
 )
 from app.modules.gestion_incidentes_atencion.repository import get_incidente_by_id_and_cliente
 
@@ -21,6 +32,99 @@ def _get_cliente_autenticado(db: Session, current_user):
     if not cliente:
         raise ValueError("El usuario autenticado no tiene perfil de cliente.")
     return cliente
+
+
+def _to_notificacion_list_response(notificacion: Notificacion) -> NotificacionListResponse:
+    return NotificacionListResponse(
+        id_notificacion=notificacion.id_notificacion,
+        id_incidente=notificacion.id_incidente,
+        titulo=notificacion.titulo,
+        mensaje=notificacion.mensaje,
+        tipo_notificacion=notificacion.tipo_notificacion,
+        leido=notificacion.leido,
+        fecha_envio=notificacion.fecha_envio,
+    )
+
+
+def _to_notificacion_detail_response(notificacion: Notificacion) -> NotificacionDetailResponse:
+    return NotificacionDetailResponse(
+        id_notificacion=notificacion.id_notificacion,
+        id_usuario=notificacion.id_usuario,
+        id_incidente=notificacion.id_incidente,
+        titulo=notificacion.titulo,
+        mensaje=notificacion.mensaje,
+        tipo_notificacion=notificacion.tipo_notificacion,
+        leido=notificacion.leido,
+        fecha_envio=notificacion.fecha_envio,
+    )
+
+
+def crear_notificacion_service(
+    db: Session,
+    payload: NotificacionCreateRequest,
+) -> NotificacionDetailResponse:
+    usuario = get_usuario_by_id(db, payload.id_usuario)
+    if not usuario:
+        raise ValueError("El destinatario de la notificacion no existe.")
+
+    if payload.id_incidente is not None:
+        incidente = get_incidente_by_id(db, payload.id_incidente)
+        if not incidente:
+            raise ValueError("El incidente asociado a la notificacion no existe.")
+
+    notificacion = create_notificacion(
+        db,
+        id_usuario=payload.id_usuario,
+        id_incidente=payload.id_incidente,
+        titulo=payload.titulo,
+        mensaje=payload.mensaje,
+        tipo_notificacion=payload.tipo_notificacion,
+    )
+    return _to_notificacion_detail_response(notificacion)
+
+
+def listar_notificaciones_service(
+    db: Session,
+    current_user,
+) -> list[NotificacionListResponse]:
+    notificaciones = get_notificaciones_by_usuario_id(db, current_user.id_usuario)
+    return [_to_notificacion_list_response(notificacion) for notificacion in notificaciones]
+
+
+def obtener_notificacion_service(
+    db: Session,
+    current_user,
+    id_notificacion: int,
+) -> NotificacionDetailResponse:
+    notificacion = get_notificacion_by_id_and_usuario(
+        db,
+        id_notificacion=id_notificacion,
+        id_usuario=current_user.id_usuario,
+    )
+    if not notificacion:
+        raise ValueError("La notificacion no existe o no pertenece al usuario autenticado.")
+    return _to_notificacion_detail_response(notificacion)
+
+
+def marcar_notificacion_leida_service(
+    db: Session,
+    current_user,
+    id_notificacion: int,
+) -> NotificacionLeidaResponse:
+    notificacion = get_notificacion_by_id_and_usuario(
+        db,
+        id_notificacion=id_notificacion,
+        id_usuario=current_user.id_usuario,
+    )
+    if not notificacion:
+        raise ValueError("La notificacion no existe o no pertenece al usuario autenticado.")
+
+    update_notificacion_leido(db, notificacion, leido=True)
+    return NotificacionLeidaResponse(
+        id_notificacion=notificacion.id_notificacion,
+        leido=notificacion.leido,
+        mensaje="Notificacion marcada como leida.",
+    )
 
 
 def listar_incidentes_cliente_service(
