@@ -82,3 +82,8 @@ class UsuarioMeResponse(BaseModel):
     estado: bool
     fecha_registro: datetime
     roles: list[str]
+
+
+class LogoutResponse(BaseModel):
+    message: str
+    invalidacion_servidor: bool

@@ -1,7 +1,12 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.modules.autenticacion_seguridad.models import Rol, Usuario, UsuarioRol
+from app.modules.autenticacion_seguridad.models import (
+    BitacoraSistema,
+    Rol,
+    Usuario,
+    UsuarioRol,
+)
 from app.modules.gestion_clientes.models import Cliente
 from app.modules.gestion_operativa_taller_tecnico.models import Taller, TipoTaller
 
@@ -111,3 +116,25 @@ def get_roles_by_usuario_id(db: Session, id_usuario: int) -> list[str]:
         .join(UsuarioRol, UsuarioRol.id_rol == Rol.id_rol)
         .where(UsuarioRol.id_usuario == id_usuario)
     ).scalars().all()
+
+
+def create_bitacora_sistema(
+    db: Session,
+    *,
+    id_usuario: int,
+    accion: str,
+    modulo: str,
+    descripcion: str | None = None,
+    ip_origen: str | None = None,
+) -> BitacoraSistema:
+    bitacora = BitacoraSistema(
+        id_usuario=id_usuario,
+        accion=accion,
+        modulo=modulo,
+        descripcion=descripcion,
+        ip_origen=ip_origen,
+    )
+    db.add(bitacora)
+    db.flush()
+    db.refresh(bitacora)
+    return bitacora

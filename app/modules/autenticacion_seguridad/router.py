@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from app.modules.autenticacion_seguridad.models import Usuario
 from app.shared.dependencies.auth import get_current_user
@@ -6,6 +6,7 @@ from app.shared.dependencies.auth import get_current_user
 from app.core.db.session import get_db
 from app.modules.autenticacion_seguridad.schemas import (
     LoginRequest,
+    LogoutResponse,
     RegistroClienteRequest,
     RegistroClienteResponse,
     RegistroTallerRequest,
@@ -14,6 +15,7 @@ from app.modules.autenticacion_seguridad.schemas import (
         UsuarioMeResponse,
 )
 from app.modules.autenticacion_seguridad.service import (
+    logout_service,
     login_service,
     register_cliente_service,
     register_taller_service,
@@ -86,3 +88,26 @@ def me(
     db: Session = Depends(get_db),
 ):
     return get_me_service(db, current_user)
+
+
+@router.post(
+    "/logout",
+    response_model=LogoutResponse,
+    status_code=status.HTTP_200_OK,
+)
+def logout(
+    request: Request,
+    current_user: Usuario = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    try:
+        return logout_service(
+            db,
+            current_user,
+            ip_origen=request.client.host if request.client else None,
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )

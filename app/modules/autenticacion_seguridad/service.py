@@ -7,6 +7,7 @@ from app.core.security.security import (
 )
 from app.modules.autenticacion_seguridad.repository import (
     assign_rol_to_usuario,
+    create_bitacora_sistema,
     create_usuario,
     create_cliente,
     create_taller,
@@ -19,6 +20,7 @@ from app.modules.autenticacion_seguridad.schemas import (
     LoginRequest,
     RegistroClienteRequest,
     RegistroClienteResponse,
+    LogoutResponse,
     RegistroTallerRequest,
     RegistroTallerResponse,
     TokenResponse,
@@ -166,4 +168,32 @@ def get_me_service(
         estado=current_user.estado,
         fecha_registro=current_user.fecha_registro,
         roles=roles,
+    )
+
+
+def logout_service(
+    db: Session,
+    current_user,
+    *,
+    ip_origen: str | None = None,
+) -> LogoutResponse:
+    try:
+        create_bitacora_sistema(
+            db,
+            id_usuario=current_user.id_usuario,
+            accion="LOGOUT",
+            modulo="AUTENTICACION_SEGURIDAD",
+            descripcion="Cierre de sesion del usuario.",
+            ip_origen=ip_origen,
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    return LogoutResponse(
+        message=(
+            "Sesion cerrada correctamente."
+        ),
+        invalidacion_servidor=False,
     )
