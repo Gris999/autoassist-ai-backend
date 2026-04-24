@@ -7,6 +7,7 @@ from app.core.security.security import (
     hash_password,
     verify_password,
 )
+from app.modules.autenticacion_seguridad.models import Usuario
 from app.modules.autenticacion_seguridad.repository import (
     assign_rol_to_usuario,
     delete_usuario_roles_by_usuario_id,
