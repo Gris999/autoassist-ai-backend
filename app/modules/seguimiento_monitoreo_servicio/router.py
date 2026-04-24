@@ -8,6 +8,8 @@ from app.modules.seguimiento_monitoreo_servicio.schemas import (
     AsignacionAuxilioDetalleResponse,
     ClienteIncidenteListResponse,
     EstadoServicioDetalleResponse,
+    IncidenteHistorialDetailResponse,
+    IncidenteHistorialListResponse,
     NotificacionDetailResponse,
     NotificacionLeidaResponse,
     NotificacionListResponse,
@@ -15,9 +17,11 @@ from app.modules.seguimiento_monitoreo_servicio.schemas import (
 from app.modules.seguimiento_monitoreo_servicio.service import (
     consultar_asignacion_auxilio_service,
     get_estado_servicio_service,
+    listar_incidentes_historial_service,
     listar_incidentes_cliente_service,
     listar_notificaciones_service,
     marcar_notificacion_leida_service,
+    obtener_historial_incidente_service,
     obtener_notificacion_service,
 )
 
@@ -25,6 +29,47 @@ router = APIRouter(
     prefix="/seguimiento",
     tags=["Seguimiento y Monitoreo del Servicio"],
 )
+
+
+@router.get(
+    "/incidentes/historial",
+    response_model=list[IncidenteHistorialListResponse],
+    status_code=status.HTTP_200_OK,
+)
+def listar_incidentes_historial(
+    current_user: Usuario = Depends(
+        require_roles("CLIENTE", "TECNICO", "TALLER", "ADMIN", "SUPERADMIN")
+    ),
+    db: Session = Depends(get_db),
+):
+    try:
+        return listar_incidentes_historial_service(db, current_user)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+
+
+@router.get(
+    "/incidentes/{id_incidente}/historial",
+    response_model=IncidenteHistorialDetailResponse,
+    status_code=status.HTTP_200_OK,
+)
+def obtener_historial_incidente(
+    id_incidente: int,
+    current_user: Usuario = Depends(
+        require_roles("CLIENTE", "TECNICO", "TALLER", "ADMIN", "SUPERADMIN")
+    ),
+    db: Session = Depends(get_db),
+):
+    try:
+        return obtener_historial_incidente_service(db, current_user, id_incidente)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
 
 
 @router.get(

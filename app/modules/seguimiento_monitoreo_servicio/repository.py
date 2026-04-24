@@ -1,8 +1,13 @@
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.modules.autenticacion_seguridad.models import Usuario
-from app.modules.gestion_incidentes_atencion.models import AsignacionServicio, Incidente
+from app.modules.autenticacion_seguridad.models import Rol, Usuario, UsuarioRol
+from app.modules.gestion_incidentes_atencion.models import (
+    AsignacionServicio,
+    HistorialIncidente,
+    Incidente,
+    SolicitudTaller,
+)
 from app.modules.gestion_operativa_taller_tecnico.models import Tecnico, Taller, UnidadMovil
 from app.modules.seguimiento_monitoreo_servicio.models import Notificacion
 
@@ -117,3 +122,93 @@ def update_notificacion_leido(
     db.flush()
     db.refresh(notificacion)
     return notificacion
+
+
+def get_roles_by_usuario_id(db: Session, id_usuario: int) -> list[str]:
+    return list(
+        db.execute(
+            select(Rol.nombre)
+            .join(UsuarioRol, UsuarioRol.id_rol == Rol.id_rol)
+            .where(UsuarioRol.id_usuario == id_usuario)
+        ).scalars()
+    )
+
+
+def get_incidentes_historial_all(db: Session) -> list[Incidente]:
+    return list(
+        db.execute(
+            select(Incidente)
+            .options(
+                joinedload(Incidente.tipo_incidente),
+                joinedload(Incidente.estado_servicio_actual),
+            )
+            .order_by(Incidente.fecha_reporte.desc())
+        ).scalars()
+    )
+
+
+def get_incidentes_historial_by_taller_id(db: Session, id_taller: int) -> list[Incidente]:
+    return list(
+        db.execute(
+            select(Incidente)
+            .options(
+                joinedload(Incidente.tipo_incidente),
+                joinedload(Incidente.estado_servicio_actual),
+            )
+            .outerjoin(AsignacionServicio, AsignacionServicio.id_incidente == Incidente.id_incidente)
+            .outerjoin(SolicitudTaller, SolicitudTaller.id_incidente == Incidente.id_incidente)
+            .where(
+                or_(
+                    AsignacionServicio.id_taller == id_taller,
+                    and_(
+                        SolicitudTaller.id_taller == id_taller,
+                        SolicitudTaller.estado_solicitud == "ACEPTADA",
+                    ),
+                )
+            )
+            .order_by(Incidente.fecha_reporte.desc())
+            .distinct()
+        ).scalars()
+    )
+
+
+def get_incidentes_historial_by_tecnico_id(db: Session, id_tecnico: int) -> list[Incidente]:
+    return list(
+        db.execute(
+            select(Incidente)
+            .options(
+                joinedload(Incidente.tipo_incidente),
+                joinedload(Incidente.estado_servicio_actual),
+            )
+            .join(AsignacionServicio, AsignacionServicio.id_incidente == Incidente.id_incidente)
+            .where(AsignacionServicio.id_tecnico == id_tecnico)
+            .order_by(Incidente.fecha_reporte.desc())
+        ).scalars()
+    )
+
+
+def get_incidente_historial_by_id(db: Session, id_incidente: int) -> Incidente | None:
+    return db.execute(
+        select(Incidente)
+        .options(
+            joinedload(Incidente.tipo_incidente),
+            joinedload(Incidente.prioridad),
+            joinedload(Incidente.estado_servicio_actual),
+            joinedload(Incidente.asignacion_servicio)
+            .joinedload(AsignacionServicio.taller.of_type(Taller)),
+            joinedload(Incidente.asignacion_servicio)
+            .joinedload(AsignacionServicio.tecnico.of_type(Tecnico))
+            .joinedload(Tecnico.usuario),
+            joinedload(Incidente.asignacion_servicio)
+            .joinedload(AsignacionServicio.unidad_movil.of_type(UnidadMovil)),
+            joinedload(Incidente.historial)
+            .joinedload(HistorialIncidente.estado_anterior),
+            joinedload(Incidente.historial)
+            .joinedload(HistorialIncidente.estado_nuevo),
+            joinedload(Incidente.historial)
+            .joinedload(HistorialIncidente.usuario_actor),
+            joinedload(Incidente.solicitudes_taller)
+            .joinedload(SolicitudTaller.taller.of_type(Taller)),
+        )
+        .where(Incidente.id_incidente == id_incidente)
+    ).scalar_one_or_none()

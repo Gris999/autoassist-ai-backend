@@ -113,3 +113,44 @@ class NotificacionLeidaResponse(BaseModel):
     id_notificacion: int
     leido: bool
     mensaje: str
+
+
+class IncidenteHistorialListResponse(BaseModel):
+    id_incidente: int
+    titulo: str
+    fecha_reporte: datetime
+    tipo_incidente: str
+    id_estado_servicio_actual: int
+    estado_servicio_actual: str
+
+
+class HistorialIncidenteEventoResponse(BaseModel):
+    fecha_hora: datetime
+    tipo_evento: str
+    actor: str | None = None
+    detalle: str | None = None
+    estado_anterior: str | None = None
+    estado_nuevo: str | None = None
+    estado_solicitud: str | None = None
+    id_taller: int | None = None
+    nombre_taller: str | None = None
+    id_tecnico: int | None = None
+    nombre_tecnico: str | None = None
+    id_unidad_movil: int | None = None
+    placa_unidad_movil: str | None = None
+
+
+class IncidenteHistorialDetailResponse(BaseModel):
+    id_incidente: int
+    titulo: str
+    fecha_reporte: datetime
+    tipo_incidente: str
+    prioridad: str
+    id_estado_servicio_actual: int
+    estado_servicio_actual: str
+    descripcion_texto: str | None = None
+    direccion_referencia: str | None = None
+    latitud: Decimal | None = None
+    longitud: Decimal | None = None
+    historial: list[HistorialIncidenteEventoResponse]
+    mensaje: str | None = None
