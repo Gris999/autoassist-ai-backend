@@ -1,9 +1,23 @@
+from datetime import datetime
+
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.modules.autenticacion_seguridad.models import Usuario
-from app.modules.gestion_clientes.models import Cliente
-from app.modules.gestion_incidentes_atencion.models import Evidencia, Incidente
+from app.modules.gestion_clientes.models import Cliente, Vehiculo
+from app.modules.gestion_incidentes_atencion.models import (
+    AsignacionServicio,
+    Evidencia,
+    Incidente,
+    SolicitudTaller,
+)
+from app.modules.gestion_operativa_taller_tecnico.models import (
+    Taller,
+    TallerAuxilio,
+    TallerTipoVehiculo,
+    Tecnico,
+    UnidadMovil,
+)
 from app.modules.seguimiento_monitoreo_servicio.models import Notificacion
 
 
@@ -126,3 +140,87 @@ def list_evidences_by_incidente_id(db: Session, id_incidente: int) -> list[Evide
             .order_by(Evidencia.fecha_registro.desc(), Evidencia.id_evidencia.desc())
         ).scalars()
     )
+
+
+def get_incidente_with_assignment_context(db: Session, id_incidente: int) -> Incidente | None:
+    return db.execute(
+        select(Incidente)
+        .options(
+            joinedload(Incidente.vehiculo).joinedload(Vehiculo.tipo_vehiculo),
+            joinedload(Incidente.estado_servicio_actual),
+            joinedload(Incidente.asignacion_servicio).joinedload(AsignacionServicio.taller),
+            joinedload(Incidente.solicitudes_taller),
+        )
+        .where(Incidente.id_incidente == id_incidente)
+    ).scalar_one_or_none()
+
+
+def list_available_talleres_with_resources(db: Session) -> list[Taller]:
+    return list(
+        db.execute(
+            select(Taller)
+            .options(
+                joinedload(Taller.talleres_auxilio).joinedload(TallerAuxilio.tipo_auxilio),
+                joinedload(Taller.talleres_tipo_vehiculo).joinedload(TallerTipoVehiculo.tipo_vehiculo),
+                joinedload(Taller.tecnicos),
+                joinedload(Taller.unidades_moviles),
+            )
+            .where(Taller.disponible == True)
+            .order_by(Taller.id_taller.asc())
+        ).unique().scalars()
+    )
+
+
+def get_solicitud_taller_by_incidente_and_taller(
+    db: Session,
+    *,
+    id_incidente: int,
+    id_taller: int,
+) -> SolicitudTaller | None:
+    return db.execute(
+        select(SolicitudTaller).where(
+            SolicitudTaller.id_incidente == id_incidente,
+            SolicitudTaller.id_taller == id_taller,
+        )
+    ).scalar_one_or_none()
+
+
+def create_solicitud_taller(
+    db: Session,
+    *,
+    id_incidente: int,
+    id_taller: int,
+    distancia_km: float,
+    puntaje_asignacion: float,
+    estado_solicitud: str,
+) -> SolicitudTaller:
+    solicitud = SolicitudTaller(
+        id_incidente=id_incidente,
+        id_taller=id_taller,
+        distancia_km=round(distancia_km, 2),
+        puntaje_asignacion=round(puntaje_asignacion, 2),
+        estado_solicitud=estado_solicitud,
+    )
+    db.add(solicitud)
+    db.flush()
+    db.refresh(solicitud)
+    return solicitud
+
+
+def update_solicitud_taller_candidate_data(
+    db: Session,
+    solicitud_taller: SolicitudTaller,
+    *,
+    distancia_km: float,
+    puntaje_asignacion: float,
+    estado_solicitud: str | None = None,
+) -> SolicitudTaller:
+    solicitud_taller.distancia_km = round(distancia_km, 2)
+    solicitud_taller.puntaje_asignacion = round(puntaje_asignacion, 2)
+    if estado_solicitud is not None:
+        solicitud_taller.estado_solicitud = estado_solicitud
+    if solicitud_taller.fecha_envio is None:
+        solicitud_taller.fecha_envio = datetime.utcnow()
+    db.flush()
+    db.refresh(solicitud_taller)
+    return solicitud_taller

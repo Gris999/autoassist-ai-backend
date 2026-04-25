@@ -50,3 +50,32 @@ class EvidenciaProcesadaResponse(BaseModel):
     texto_extraido: str | None = None
     descripcion: str | None = None
     mensaje: str | None = None
+
+
+class TallerCandidatoResponse(BaseModel):
+    id_taller: int
+    nombre_taller: str
+    distancia_km: float
+    puntaje_asignacion: float
+    compatible_servicio: bool
+    compatible_tipo_vehiculo: bool
+    taller_disponible: bool
+    tecnico_disponible: bool
+    unidad_movil_disponible: bool
+    estado_solicitud: str
+
+
+class TallerRecomendadoResponse(BaseModel):
+    id_taller: int
+    nombre_taller: str
+    distancia_km: float
+    puntaje_asignacion: float
+
+
+class AsignacionInteligenteResponse(BaseModel):
+    id_incidente: int
+    clasificacion_ia: str
+    taller_recomendado: TallerRecomendadoResponse
+    candidatos: list[TallerCandidatoResponse]
+    total_candidatos: int
+    mensaje: str

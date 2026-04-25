@@ -5,15 +5,22 @@ from app.core.db.session import get_db
 from app.modules.inteligencia_gestion_estrategica.schemas import (
     AnalisisIncidenteManualRequest,
     AnalisisIncidenteResponse,
+    AsignacionInteligenteResponse,
     EvidenciaProcesadaResponse,
     RegistrarEvidenciaProcesadaRequest,
     SolicitudMasInformacionResponse,
 )
 from app.modules.inteligencia_gestion_estrategica.service import (
+    IncidentClassificationInsufficientError,
     IncidentClientNotFoundError,
     IncidentDoesNotRequireMoreInformationError,
+    IncidentLocationInvalidError,
     IncidentNotFoundError,
+    IncidentNotAnalyzedError,
     IncidentUserNotFoundError,
+    IncidentVehicleNotFoundError,
+    NoCandidateTallerFoundError,
+    asignar_taller_inteligentemente_service,
     analizar_incidente_manual_service,
     analizar_incidente_por_id_service,
     listar_evidencias_procesadas_incidente_service,
@@ -158,4 +165,39 @@ def listar_evidencias_procesadas_incidente(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Ocurrio un error inesperado al listar las evidencias del incidente.",
+        ) from exc
+
+
+@router.post(
+    "/incidentes/{id_incidente}/asignar-taller-inteligente",
+    response_model=AsignacionInteligenteResponse,
+    status_code=status.HTTP_200_OK,
+)
+def asignar_taller_inteligente(
+    id_incidente: int,
+    db: Session = Depends(get_db),
+):
+    try:
+        return asignar_taller_inteligentemente_service(db, id_incidente)
+    except (IncidentNotFoundError, NoCandidateTallerFoundError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except (
+        IncidentNotAnalyzedError,
+        IncidentDoesNotRequireMoreInformationError,
+        IncidentClassificationInsufficientError,
+        IncidentLocationInvalidError,
+        IncidentVehicleNotFoundError,
+        ValueError,
+    ) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Ocurrio un error inesperado al calcular la asignacion inteligente de taller.",
         ) from exc

@@ -1,25 +1,34 @@
 import unicodedata
 from decimal import Decimal
+from math import asin, cos, radians, sin, sqrt
 
 from sqlalchemy.orm import Session
 
 from app.modules.inteligencia_gestion_estrategica.repository import (
+    create_solicitud_taller,
     create_processed_evidence,
     create_notification,
     get_cliente_by_id,
     get_evidencia_textos_by_incidente_id,
     get_incidente_by_id,
+    get_incidente_with_assignment_context,
     get_pending_notification_by_incidente_usuario_tipo,
+    get_solicitud_taller_by_incidente_and_taller,
     get_usuario_by_id,
+    list_available_talleres_with_resources,
     list_evidences_by_incidente_id,
+    update_solicitud_taller_candidate_data,
     update_incidente_analysis_result,
 )
 from app.modules.inteligencia_gestion_estrategica.schemas import (
     AnalisisIncidenteManualRequest,
     AnalisisIncidenteResponse,
+    AsignacionInteligenteResponse,
     EvidenciaProcesadaResponse,
     RegistrarEvidenciaProcesadaRequest,
     SolicitudMasInformacionResponse,
+    TallerCandidatoResponse,
+    TallerRecomendadoResponse,
 )
 
 
@@ -133,6 +142,19 @@ ALLOWED_EVIDENCE_TYPES = {
     "IMAGEN_ANALIZADA",
 }
 
+CLASSIFICATION_SERVICE_KEYWORDS = {
+    "bateria": ("bateria", "electrico", "corriente"),
+    "llanta": ("llanta", "rueda", "neumatico", "pinchazo"),
+    "choque": ("remolque", "grua", "choque", "accidente"),
+    "motor": ("mecanica", "motor", "remolque", "grua"),
+    "combustible": ("combustible", "gasolina"),
+    "llave": ("llave", "cerrajeria", "apertura"),
+}
+
+ESTADOS_SOLICITUD_EXCLUIDOS = {"RECHAZADA"}
+ESTADOS_INCIDENTE_NO_APTOS_PARA_ASIGNACION = {"FINALIZADO", "CANCELADO"}
+ESTADO_SOLICITUD_INTELIGENTE = "PENDIENTE"
+
 
 class IncidentNotFoundError(LookupError):
     pass
@@ -147,6 +169,26 @@ class IncidentClientNotFoundError(LookupError):
 
 
 class IncidentUserNotFoundError(LookupError):
+    pass
+
+
+class IncidentNotAnalyzedError(ValueError):
+    pass
+
+
+class IncidentClassificationInsufficientError(ValueError):
+    pass
+
+
+class IncidentLocationInvalidError(ValueError):
+    pass
+
+
+class IncidentVehicleNotFoundError(ValueError):
+    pass
+
+
+class NoCandidateTallerFoundError(LookupError):
     pass
 
 
@@ -310,6 +352,155 @@ def _normalize_evidence_type(tipo_evidencia: str) -> str:
             "tipo_evidencia no permitido. Use TEXTO, AUDIO_TRANSCRITO o IMAGEN_ANALIZADA."
         )
     return normalized_type
+
+
+def _normalize_service_name(value: str | None) -> str:
+    if not value:
+        return ""
+    return _normalize_text(value)
+
+
+def _get_service_keywords_for_classification(clasificacion_ia: str) -> tuple[str, ...]:
+    normalized_category = clasificacion_ia.strip().lower()
+    if normalized_category not in CLASSIFICATION_SERVICE_KEYWORDS:
+        raise IncidentClassificationInsufficientError(
+            "La clasificacion del incidente no es suficiente para asignar taller."
+        )
+    return CLASSIFICATION_SERVICE_KEYWORDS[normalized_category]
+
+
+def _haversine_distance_km(
+    lat1: float,
+    lon1: float,
+    lat2: float,
+    lon2: float,
+) -> float:
+    radius_km = 6371.0
+    delta_lat = radians(lat2 - lat1)
+    delta_lon = radians(lon2 - lon1)
+    a = (
+        sin(delta_lat / 2) ** 2
+        + cos(radians(lat1)) * cos(radians(lat2)) * sin(delta_lon / 2) ** 2
+    )
+    c = 2 * asin(sqrt(a))
+    return radius_km * c
+
+
+def _calculate_distance_score(distance_km: float, coverage_km: float) -> float:
+    if distance_km <= 2:
+        return 10.0
+    if distance_km <= 5:
+        return 8.0
+    if distance_km <= 10:
+        return 5.0
+    if distance_km <= coverage_km:
+        return 3.0
+    return 0.0
+
+
+def _has_available_tecnico(taller) -> bool:
+    return any(tecnico.estado and tecnico.disponible for tecnico in taller.tecnicos)
+
+
+def _has_available_unidad_movil(taller) -> bool:
+    return any(
+        unidad_movil.estado and unidad_movil.disponible
+        for unidad_movil in taller.unidades_moviles
+    )
+
+
+def _is_vehicle_type_compatible(taller, id_tipo_vehiculo: int) -> bool:
+    return any(
+        taller_tipo_vehiculo.id_tipo_vehiculo == id_tipo_vehiculo
+        for taller_tipo_vehiculo in taller.talleres_tipo_vehiculo
+    )
+
+
+def _get_feasible_auxilio_for_classification(
+    taller,
+    *,
+    clasificacion_ia: str,
+    unidad_movil_disponible: bool,
+):
+    keywords = _get_service_keywords_for_classification(clasificacion_ia)
+    compatible_services = []
+    for taller_auxilio in taller.talleres_auxilio:
+        tipo_auxilio = taller_auxilio.tipo_auxilio
+        if not tipo_auxilio or not tipo_auxilio.estado or not taller_auxilio.disponible:
+            continue
+
+        service_name = _normalize_service_name(tipo_auxilio.nombre)
+        if any(keyword in service_name for keyword in keywords):
+            compatible_services.append(taller_auxilio)
+
+    if not compatible_services:
+        return None
+
+    feasible_services = [
+        service
+        for service in compatible_services
+        if not service.tipo_auxilio.requiere_unidad_movil or unidad_movil_disponible
+    ]
+    if not feasible_services:
+        return None
+
+    return feasible_services[0]
+
+
+def _validate_incidente_for_intelligent_assignment(incidente) -> None:
+    if not incidente:
+        raise IncidentNotFoundError("Incidente no encontrado.")
+    if incidente.clasificacion_ia is None:
+        raise IncidentNotAnalyzedError(
+            "El incidente debe ser analizado primero por CU25."
+        )
+    if incidente.requiere_mas_info:
+        raise IncidentDoesNotRequireMoreInformationError(
+            "El incidente aun requiere mas informacion para asignar taller."
+        )
+    if incidente.clasificacion_ia.strip().lower() == "incierto":
+        raise IncidentClassificationInsufficientError(
+            "La clasificacion del incidente no es suficiente para asignar taller."
+        )
+    if incidente.latitud is None or incidente.longitud is None:
+        raise IncidentLocationInvalidError(
+            "El incidente no tiene ubicacion valida para asignar taller."
+        )
+    if incidente.vehiculo is None or incidente.vehiculo.id_tipo_vehiculo is None:
+        raise IncidentVehicleNotFoundError(
+            "El incidente no tiene un vehiculo asociado valido."
+        )
+    if (
+        incidente.estado_servicio_actual
+        and incidente.estado_servicio_actual.nombre in ESTADOS_INCIDENTE_NO_APTOS_PARA_ASIGNACION
+    ):
+        raise ValueError("El incidente no se encuentra en un estado apto para asignacion.")
+    if incidente.asignacion_servicio is not None:
+        raise ValueError("El incidente ya tiene una asignacion operativa registrada.")
+
+
+def _build_taller_candidate_response(
+    *,
+    taller,
+    distancia_km: float,
+    puntaje_asignacion: float,
+    taller_disponible: bool,
+    tecnico_disponible: bool,
+    unidad_movil_disponible: bool,
+    estado_solicitud: str,
+) -> TallerCandidatoResponse:
+    return TallerCandidatoResponse(
+        id_taller=taller.id_taller,
+        nombre_taller=taller.nombre_taller,
+        distancia_km=round(distancia_km, 2),
+        puntaje_asignacion=round(puntaje_asignacion, 2),
+        compatible_servicio=True,
+        compatible_tipo_vehiculo=True,
+        taller_disponible=taller_disponible,
+        tecnico_disponible=tecnico_disponible,
+        unidad_movil_disponible=unidad_movil_disponible,
+        estado_solicitud=estado_solicitud,
+    )
 
 
 def _run_incident_analysis(
@@ -532,3 +723,125 @@ def listar_evidencias_procesadas_incidente_service(
         _to_evidencia_procesada_response(evidencia)
         for evidencia in evidencias
     ]
+
+
+def asignar_taller_inteligentemente_service(
+    db: Session,
+    id_incidente: int,
+) -> AsignacionInteligenteResponse:
+    incidente = get_incidente_with_assignment_context(db, id_incidente)
+    _validate_incidente_for_intelligent_assignment(incidente)
+
+    incident_lat = float(incidente.latitud)
+    incident_lon = float(incidente.longitud)
+    vehicle_type_id = incidente.vehiculo.id_tipo_vehiculo
+
+    talleres = list_available_talleres_with_resources(db)
+    candidatos_registrados: list[TallerCandidatoResponse] = []
+
+    for taller in talleres:
+        if taller.latitud is None or taller.longitud is None or taller.radio_cobertura_km is None:
+            continue
+
+        taller_disponible = bool(taller.disponible)
+        tecnico_disponible = _has_available_tecnico(taller)
+        unidad_movil_disponible = _has_available_unidad_movil(taller)
+        compatible_tipo_vehiculo = _is_vehicle_type_compatible(taller, vehicle_type_id)
+
+        if not taller_disponible or not tecnico_disponible or not compatible_tipo_vehiculo:
+            continue
+
+        auxilio_compatible = _get_feasible_auxilio_for_classification(
+            taller,
+            clasificacion_ia=incidente.clasificacion_ia,
+            unidad_movil_disponible=unidad_movil_disponible,
+        )
+        if auxilio_compatible is None:
+            continue
+
+        distance_km = _haversine_distance_km(
+            incident_lat,
+            incident_lon,
+            float(taller.latitud),
+            float(taller.longitud),
+        )
+        coverage_km = float(taller.radio_cobertura_km)
+        if distance_km > coverage_km:
+            continue
+
+        distance_score = _calculate_distance_score(distance_km, coverage_km)
+        unit_score = 10.0 if (
+            unidad_movil_disponible or not auxilio_compatible.tipo_auxilio.requiere_unidad_movil
+        ) else 0.0
+        total_score = 35.0 + 20.0 + 15.0 + 10.0 + unit_score + distance_score
+
+        existing_solicitud = get_solicitud_taller_by_incidente_and_taller(
+            db,
+            id_incidente=incidente.id_incidente,
+            id_taller=taller.id_taller,
+        )
+        if existing_solicitud and existing_solicitud.estado_solicitud in ESTADOS_SOLICITUD_EXCLUIDOS:
+            continue
+
+        if existing_solicitud:
+            solicitud = update_solicitud_taller_candidate_data(
+                db,
+                existing_solicitud,
+                distancia_km=distance_km,
+                puntaje_asignacion=total_score,
+            )
+        else:
+            solicitud = create_solicitud_taller(
+                db,
+                id_incidente=incidente.id_incidente,
+                id_taller=taller.id_taller,
+                distancia_km=distance_km,
+                puntaje_asignacion=total_score,
+                estado_solicitud=ESTADO_SOLICITUD_INTELIGENTE,
+            )
+
+        candidatos_registrados.append(
+            _build_taller_candidate_response(
+                taller=taller,
+                distancia_km=distance_km,
+                puntaje_asignacion=total_score,
+                taller_disponible=taller_disponible,
+                tecnico_disponible=tecnico_disponible,
+                unidad_movil_disponible=unidad_movil_disponible,
+                estado_solicitud=solicitud.estado_solicitud,
+            )
+        )
+
+    if not candidatos_registrados:
+        db.rollback()
+        raise NoCandidateTallerFoundError(
+            "No existen talleres disponibles y compatibles para atender el incidente."
+        )
+
+    candidatos_registrados.sort(
+        key=lambda candidato: (
+            -candidato.puntaje_asignacion,
+            candidato.distancia_km,
+        ),
+    )
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+
+    taller_recomendado = candidatos_registrados[0]
+    return AsignacionInteligenteResponse(
+        id_incidente=incidente.id_incidente,
+        clasificacion_ia=incidente.clasificacion_ia,
+        taller_recomendado=TallerRecomendadoResponse(
+            id_taller=taller_recomendado.id_taller,
+            nombre_taller=taller_recomendado.nombre_taller,
+            distancia_km=taller_recomendado.distancia_km,
+            puntaje_asignacion=taller_recomendado.puntaje_asignacion,
+        ),
+        candidatos=candidatos_registrados,
+        total_candidatos=len(candidatos_registrados),
+        mensaje="Taller recomendado correctamente.",
+    )
