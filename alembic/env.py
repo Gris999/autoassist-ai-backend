@@ -21,6 +21,7 @@ from app.modules.gestion_clientes.models import (
 )
 from app.modules.gestion_operativa_taller_tecnico.models import (
     Especialidad,
+    HorarioDisponibilidadTaller,
     Taller,
     TallerAuxilio,
     TallerTipoVehiculo,

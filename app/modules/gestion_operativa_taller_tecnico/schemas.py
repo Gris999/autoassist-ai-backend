@@ -1,20 +1,71 @@
-from datetime import datetime
+from datetime import datetime, time
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
+
+
+DIAS_SEMANA_VALIDOS = {
+    "LUNES",
+    "MARTES",
+    "MIERCOLES",
+    "JUEVES",
+    "VIERNES",
+    "SABADO",
+    "DOMINGO",
+}
+
+
+class HorarioDisponibilidadTallerRequest(BaseModel):
+    dia_semana: str = Field(min_length=5, max_length=15)
+    hora_inicio: time
+    hora_fin: time
+    estado: bool = True
+
+    @model_validator(mode="after")
+    def validar_rango_horario(self):
+        self.dia_semana = self.dia_semana.strip().upper()
+        if self.dia_semana not in DIAS_SEMANA_VALIDOS:
+            raise ValueError("El dia_semana no es valido.")
+        if self.hora_inicio >= self.hora_fin:
+            raise ValueError("La hora_inicio debe ser menor que la hora_fin.")
+        return self
+
+
+class HorarioDisponibilidadTallerResponse(BaseModel):
+    id_horario_disponibilidad: int
+    dia_semana: str
+    hora_inicio: time
+    hora_fin: time
+    estado: bool
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ActualizarDisponibilidadTallerRequest(BaseModel):
-    disponible: bool = Field(description="Indicar si el taller está disponible")
+    disponible: bool = Field(description="Indicar si el taller esta disponible")
+    latitud: float | None = Field(default=None, ge=-90, le=90)
+    longitud: float | None = Field(default=None, ge=-180, le=180)
+    radio_cobertura_km: float | None = Field(default=None, gt=0)
+    horarios: list[HorarioDisponibilidadTallerRequest] | None = None
+
+    @model_validator(mode="after")
+    def validar_coordenadas_completas(self):
+        if (self.latitud is None) != (self.longitud is None):
+            raise ValueError(
+                "Latitud y longitud deben enviarse juntas o ambas omitirse."
+            )
+        return self
 
 
 class DisponibilidadTallerResponse(BaseModel):
     id_taller: int
     nombre_taller: str
     disponible: bool
+    direccion: str
     latitud: float | None = None
     longitud: float | None = None
     radio_cobertura_km: float | None = None
     fecha_registro: datetime
+    horarios: list[HorarioDisponibilidadTallerResponse] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -58,7 +109,7 @@ class TallerAuxilioResponse(BaseModel):
 
 
 class ActualizarDisponibilidadTecnicoRequest(BaseModel):
-    disponible: bool = Field(description="Indicar si el técnico está disponible")
+    disponible: bool = Field(description="Indicar si el tecnico esta disponible")
 
 
 class DisponibilidadTecnicoResponse(BaseModel):

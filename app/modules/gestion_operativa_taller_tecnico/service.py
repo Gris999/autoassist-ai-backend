@@ -11,8 +11,10 @@ from app.modules.gestion_operativa_taller_tecnico.repository import (
     create_unidad_movil,
     create_tecnico,
     create_tecnico_especialidad,
+    create_horario_disponibilidad_taller,
     create_taller_tipo_vehiculo,
     create_taller_auxilio,
+    delete_horarios_disponibilidad_by_taller_id,
     delete_taller_tipos_vehiculo_by_ids,
     delete_tecnico_especialidades_by_ids,
     get_especialidades_by_ids,
@@ -21,6 +23,7 @@ from app.modules.gestion_operativa_taller_tecnico.repository import (
     get_taller_auxilio_by_id,
     get_taller_auxilio_by_taller_id_tipo_auxilio,
     get_taller_by_usuario_id,
+    get_horarios_disponibilidad_by_taller_id,
     get_unidad_movil_by_id,
     get_unidad_movil_by_placa,
     get_unidades_moviles_by_taller_id,
@@ -47,7 +50,9 @@ from app.modules.gestion_operativa_taller_tecnico.schemas import (
     ActualizarDisponibilidadTecnicoRequest,
     ActualizarDisponibilidadTallerRequest,
     DisponibilidadTecnicoResponse,
+    DisponibilidadTallerResponse,
     EspecialidadResponse,
+    HorarioDisponibilidadTallerResponse,
     TecnicoCreateRequest,
     TecnicoDetailResponse,
     TecnicoEstadoResponse,
@@ -61,7 +66,6 @@ from app.modules.gestion_operativa_taller_tecnico.schemas import (
     TallerAuxilioCreateRequest,
     TallerAuxilioResponse,
     TallerAuxilioUpdateRequest,
-    DisponibilidadTallerResponse,
     TipoVehiculoResponse,
     TallerInfoResponse,
     UnidadMovilCreateRequest,
@@ -77,6 +81,45 @@ def _get_taller_gestor_service(db: Session, current_user):
     if not taller:
         raise ValueError("El usuario autenticado no tiene perfil de taller.")
     return taller
+
+
+def _to_horario_disponibilidad_response(horario) -> HorarioDisponibilidadTallerResponse:
+    return HorarioDisponibilidadTallerResponse.model_validate(horario)
+
+
+def _to_disponibilidad_taller_response(
+    taller,
+    horarios,
+) -> DisponibilidadTallerResponse:
+    return DisponibilidadTallerResponse(
+        id_taller=taller.id_taller,
+        nombre_taller=taller.nombre_taller,
+        disponible=taller.disponible,
+        direccion=taller.direccion,
+        latitud=float(taller.latitud) if taller.latitud is not None else None,
+        longitud=float(taller.longitud) if taller.longitud is not None else None,
+        radio_cobertura_km=(
+            float(taller.radio_cobertura_km) if taller.radio_cobertura_km is not None else None
+        ),
+        fecha_registro=taller.fecha_registro,
+        horarios=[_to_horario_disponibilidad_response(horario) for horario in horarios],
+    )
+
+
+def _validar_conflictos_horarios(horarios) -> None:
+    horarios_por_dia: dict[str, list] = {}
+    for horario in horarios:
+        horarios_por_dia.setdefault(horario.dia_semana, []).append(horario)
+
+    for dia_semana, horarios_dia in horarios_por_dia.items():
+        ordenados = sorted(horarios_dia, key=lambda item: item.hora_inicio)
+        for indice in range(1, len(ordenados)):
+            anterior = ordenados[indice - 1]
+            actual = ordenados[indice]
+            if actual.hora_inicio < anterior.hora_fin:
+                raise ValueError(
+                    f"Existe conflicto entre horarios registrados para {dia_semana}."
+                )
 
 
 def _validar_tecnico_del_taller(db: Session, id_tecnico: int, id_taller: int):
@@ -248,7 +291,8 @@ def obtener_disponibilidad_taller_service(
     if not taller:
         raise ValueError("El usuario autenticado no tiene perfil de taller.")
 
-    return DisponibilidadTallerResponse.model_validate(taller)
+    horarios = get_horarios_disponibilidad_by_taller_id(db, taller.id_taller)
+    return _to_disponibilidad_taller_response(taller, horarios)
 
 
 def actualizar_disponibilidad_taller_service(
@@ -261,16 +305,34 @@ def actualizar_disponibilidad_taller_service(
         raise ValueError("El usuario autenticado no tiene perfil de taller.")
 
     try:
+        if payload.horarios is not None:
+            _validar_conflictos_horarios(payload.horarios)
+
         taller_actualizado = update_disponibilidad_taller(
             db,
             id_taller=taller.id_taller,
             disponible=payload.disponible,
+            latitud=payload.latitud,
+            longitud=payload.longitud,
+            radio_cobertura_km=payload.radio_cobertura_km,
         )
+
+        if payload.horarios is not None:
+            delete_horarios_disponibilidad_by_taller_id(db, id_taller=taller.id_taller)
+            for horario in payload.horarios:
+                create_horario_disponibilidad_taller(
+                    db,
+                    id_taller=taller.id_taller,
+                    dia_semana=horario.dia_semana,
+                    hora_inicio=horario.hora_inicio,
+                    hora_fin=horario.hora_fin,
+                    estado=horario.estado,
+                )
 
         db.commit()
         db.refresh(taller_actualizado)
-
-        return DisponibilidadTallerResponse.model_validate(taller_actualizado)
+        horarios = get_horarios_disponibilidad_by_taller_id(db, taller.id_taller)
+        return _to_disponibilidad_taller_response(taller_actualizado, horarios)
     except Exception:
         db.rollback()
         raise

@@ -1,7 +1,8 @@
 from sqlalchemy import select
 
 from app.core.db.session import SessionLocal
-from app.modules.autenticacion_seguridad.models import Rol
+from app.core.security.security import hash_password
+from app.modules.autenticacion_seguridad.models import Rol, Usuario, UsuarioRol
 from app.modules.gestion_operativa_taller_tecnico.models import (
     Especialidad,
     TipoAuxilio,
@@ -35,11 +36,95 @@ def seed_roles(session):
         {"nombre": "TALLER", "descripcion": "Taller que ofrece servicios de auxilio"},
         {"nombre": "TECNICO", "descripcion": "Tecnico asignado para atender incidentes"},
         {"nombre": "ADMIN", "descripcion": "Administrador de la plataforma"},
-        {"nombre": "SUPERADMIN", "descripcion": "Superadministrador del sistema"},
+        {"nombre": "SISTEMA", "descripcion": "Actor automatico del sistema e integraciones de IA"},
     ]
 
     for item in roles:
         get_or_create(session, Rol, nombre=item["nombre"], defaults=item)
+
+    rol_superadmin = session.execute(
+        select(Rol).where(Rol.nombre == "SUPERADMIN")
+    ).scalar_one_or_none()
+    if rol_superadmin:
+        asignaciones_superadmin = session.execute(
+            select(UsuarioRol).where(UsuarioRol.id_rol == rol_superadmin.id_rol)
+        ).scalars().all()
+        for asignacion in asignaciones_superadmin:
+            session.delete(asignacion)
+        session.flush()
+        session.delete(rol_superadmin)
+
+
+def seed_admin_user(session):
+    admin_email = "admin@autoassist.com"
+    legacy_admin_email = "admin@autoassist.local"
+    admin_password = "AdminAutoAssist123"
+
+    usuario = session.execute(
+        select(Usuario).where(
+            Usuario.email.in_([admin_email, legacy_admin_email])
+        )
+    ).scalar_one_or_none()
+
+    if usuario:
+        if usuario.email != admin_email:
+            usuario.email = admin_email
+        if not usuario.estado:
+            usuario.estado = True
+    else:
+        usuario, _ = get_or_create(
+            session,
+            Usuario,
+            email=admin_email,
+            defaults={
+                "nombres": "Admin",
+                "apellidos": "AutoAssist",
+                "celular": "70000000",
+                "password_hash": hash_password(admin_password),
+                "estado": True,
+            },
+        )
+        session.flush()
+
+    if not usuario.estado:
+        usuario.estado = True
+
+    rol_admin = session.execute(
+        select(Rol).where(Rol.nombre == "ADMIN")
+    ).scalar_one_or_none()
+
+    if not rol_admin:
+        raise ValueError("No existe el rol ADMIN en la base de datos.")
+
+    roles_legacy = list(
+        session.execute(
+            select(Rol).where(Rol.nombre.in_(["SUPERADMIN", "ADMIN"]))
+        ).scalars()
+    )
+
+    for rol in roles_legacy:
+        existe_asignacion = session.execute(
+            select(UsuarioRol).where(
+                UsuarioRol.id_usuario == usuario.id_usuario,
+                UsuarioRol.id_rol == rol.id_rol,
+            )
+        ).scalar_one_or_none()
+        if existe_asignacion and rol.nombre == "SUPERADMIN":
+            session.delete(existe_asignacion)
+
+    existe_admin = session.execute(
+        select(UsuarioRol).where(
+            UsuarioRol.id_usuario == usuario.id_usuario,
+            UsuarioRol.id_rol == rol_admin.id_rol,
+        )
+    ).scalar_one_or_none()
+    if not existe_admin:
+        session.add(
+            UsuarioRol(
+                id_usuario=usuario.id_usuario,
+                id_rol=rol_admin.id_rol,
+            )
+        )
 
 
 def seed_tipos_taller(session):
@@ -175,6 +260,7 @@ def run_seeds():
     session = SessionLocal()
     try:
         seed_roles(session)
+        seed_admin_user(session)
         seed_tipos_taller(session)
         seed_tipos_vehiculo(session)
         seed_tipos_auxilio(session)

@@ -64,7 +64,7 @@ def _get_tecnico_autenticado(db: Session, current_user):
 
 def _resolver_rol_historial_service(db: Session, current_user) -> str:
     roles = set(get_roles_by_usuario_id(db, current_user.id_usuario))
-    if "SUPERADMIN" in roles or "ADMIN" in roles:
+    if "ADMIN" in roles:
         return "ADMIN"
     if "TALLER" in roles:
         return "TALLER"

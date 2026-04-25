@@ -38,7 +38,7 @@ router = APIRouter(
 )
 def listar_incidentes_historial(
     current_user: Usuario = Depends(
-        require_roles("CLIENTE", "TECNICO", "TALLER", "ADMIN", "SUPERADMIN")
+        require_roles("CLIENTE", "TECNICO", "TALLER", "ADMIN")
     ),
     db: Session = Depends(get_db),
 ):
@@ -59,7 +59,7 @@ def listar_incidentes_historial(
 def obtener_historial_incidente(
     id_incidente: int,
     current_user: Usuario = Depends(
-        require_roles("CLIENTE", "TECNICO", "TALLER", "ADMIN", "SUPERADMIN")
+        require_roles("CLIENTE", "TECNICO", "TALLER", "ADMIN")
     ),
     db: Session = Depends(get_db),
 ):

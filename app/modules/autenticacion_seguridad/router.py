@@ -140,7 +140,7 @@ def listar_bitacora(
     id_usuario: int | None = Query(default=None, ge=1),
     modulo: str | None = Query(default=None),
     accion: str | None = Query(default=None),
-    current_user: Usuario = Depends(require_roles("ADMIN", "SUPERADMIN")),
+    current_user: Usuario = Depends(require_roles("ADMIN")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -166,7 +166,7 @@ def listar_bitacora(
 )
 def obtener_bitacora(
     id_bitacora: int,
-    current_user: Usuario = Depends(require_roles("ADMIN", "SUPERADMIN")),
+    current_user: Usuario = Depends(require_roles("ADMIN")),
     db: Session = Depends(get_db),
 ):
     try:
@@ -195,7 +195,7 @@ def listar_tipos_taller(
     status_code=status.HTTP_200_OK,
 )
 def listar_roles(
-    current_user: Usuario = Depends(require_roles("ADMIN", "SUPERADMIN")),
+    current_user: Usuario = Depends(require_roles("ADMIN")),
     db: Session = Depends(get_db),
 ):
     return listar_roles_service(db)
@@ -207,7 +207,7 @@ def listar_roles(
     status_code=status.HTTP_200_OK,
 )
 def listar_usuarios_roles(
-    current_user: Usuario = Depends(require_roles("ADMIN", "SUPERADMIN")),
+    current_user: Usuario = Depends(require_roles("ADMIN")),
     db: Session = Depends(get_db),
 ):
     return listar_usuarios_roles_service(db)
@@ -222,7 +222,7 @@ def actualizar_roles_usuario(
     id_usuario: int,
     payload: UsuarioRolesUpdateRequest,
     request: Request,
-    current_user: Usuario = Depends(require_roles("ADMIN", "SUPERADMIN")),
+    current_user: Usuario = Depends(require_roles("ADMIN")),
     db: Session = Depends(get_db),
 ):
     try:

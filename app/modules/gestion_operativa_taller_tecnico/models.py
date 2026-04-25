@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time
 
 from sqlalchemy import (
     BigInteger,
@@ -8,6 +8,7 @@ from sqlalchemy import (
     Identity,
     Numeric,
     String,
+    Time,
     UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -79,6 +80,39 @@ class Taller(Base):
         back_populates="taller",
         cascade="all, delete-orphan",
     )
+    horarios_disponibilidad: Mapped[list["HorarioDisponibilidadTaller"]] = relationship(
+        back_populates="taller",
+        cascade="all, delete-orphan",
+    )
+
+
+class HorarioDisponibilidadTaller(Base):
+    __tablename__ = "horario_disponibilidad_taller"
+    __table_args__ = (
+        UniqueConstraint(
+            "id_taller",
+            "dia_semana",
+            "hora_inicio",
+            "hora_fin",
+            name="uq_taller_horario_disponibilidad",
+        ),
+    )
+
+    id_horario_disponibilidad: Mapped[int] = mapped_column(
+        BigInteger,
+        Identity(),
+        primary_key=True,
+    )
+    id_taller: Mapped[int] = mapped_column(
+        ForeignKey("taller.id_taller"),
+        nullable=False,
+    )
+    dia_semana: Mapped[str] = mapped_column(String(15), nullable=False)
+    hora_inicio: Mapped[time] = mapped_column(Time, nullable=False)
+    hora_fin: Mapped[time] = mapped_column(Time, nullable=False)
+    estado: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    taller: Mapped["Taller"] = relationship(back_populates="horarios_disponibilidad")
 
 
 class Tecnico(Base):

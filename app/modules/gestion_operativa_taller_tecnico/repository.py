@@ -9,6 +9,7 @@ from app.modules.gestion_incidentes_atencion.models import (
     Incidente,
 )
 from app.modules.gestion_operativa_taller_tecnico.models import (
+    HorarioDisponibilidadTaller,
     Especialidad,
     Taller,
     TallerAuxilio,
@@ -37,10 +38,19 @@ def update_disponibilidad_taller(
     *,
     id_taller: int,
     disponible: bool,
+    latitud: float | None = None,
+    longitud: float | None = None,
+    radio_cobertura_km: float | None = None,
 ) -> Taller:
     taller = get_taller_by_id(db, id_taller)
     if taller:
         taller.disponible = disponible
+        if latitud is not None:
+            taller.latitud = latitud
+        if longitud is not None:
+            taller.longitud = longitud
+        if radio_cobertura_km is not None:
+            taller.radio_cobertura_km = radio_cobertura_km
         db.flush()
         db.refresh(taller)
     return taller
@@ -52,6 +62,61 @@ def get_talleres_disponibles(db: Session) -> list[Taller]:
             select(Taller).where(Taller.disponible == True)
         ).scalars()
     )
+
+
+def get_horarios_disponibilidad_by_taller_id(
+    db: Session,
+    id_taller: int,
+) -> list[HorarioDisponibilidadTaller]:
+    return list(
+        db.execute(
+            select(HorarioDisponibilidadTaller)
+            .where(HorarioDisponibilidadTaller.id_taller == id_taller)
+            .order_by(
+                HorarioDisponibilidadTaller.dia_semana.asc(),
+                HorarioDisponibilidadTaller.hora_inicio.asc(),
+            )
+        ).scalars()
+    )
+
+
+def create_horario_disponibilidad_taller(
+    db: Session,
+    *,
+    id_taller: int,
+    dia_semana: str,
+    hora_inicio,
+    hora_fin,
+    estado: bool,
+) -> HorarioDisponibilidadTaller:
+    horario = HorarioDisponibilidadTaller(
+        id_taller=id_taller,
+        dia_semana=dia_semana,
+        hora_inicio=hora_inicio,
+        hora_fin=hora_fin,
+        estado=estado,
+    )
+    db.add(horario)
+    db.flush()
+    db.refresh(horario)
+    return horario
+
+
+def delete_horarios_disponibilidad_by_taller_id(
+    db: Session,
+    *,
+    id_taller: int,
+) -> None:
+    horarios = db.execute(
+        select(HorarioDisponibilidadTaller).where(
+            HorarioDisponibilidadTaller.id_taller == id_taller
+        )
+    ).scalars().all()
+
+    for horario in horarios:
+        db.delete(horario)
+
+    db.flush()
 
 
 def get_tipo_auxilio_by_id(db: Session, id_tipo_auxilio: int) -> TipoAuxilio | None:
