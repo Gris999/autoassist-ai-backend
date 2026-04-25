@@ -31,3 +31,22 @@ class SolicitudMasInformacionResponse(PreguntasSugeridasResponse):
     solicitud_emitida: bool
     mensaje: str
     id_notificacion: int | None = None
+
+
+class RegistrarEvidenciaProcesadaRequest(BaseModel):
+    tipo_evidencia: str
+    archivo_url: str | None = None
+    texto_extraido: str
+    descripcion: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class EvidenciaProcesadaResponse(BaseModel):
+    id_evidencia: int
+    id_incidente: int
+    tipo_evidencia: str
+    archivo_url: str | None = None
+    texto_extraido: str | None = None
+    descripcion: str | None = None
+    mensaje: str | None = None

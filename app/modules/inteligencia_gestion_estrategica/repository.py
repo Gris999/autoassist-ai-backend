@@ -94,3 +94,35 @@ def create_notification(
     db.flush()
     db.refresh(notification)
     return notification
+
+
+def create_processed_evidence(
+    db: Session,
+    *,
+    id_incidente: int,
+    tipo_evidencia: str,
+    archivo_url: str,
+    texto_extraido: str,
+    descripcion: str | None,
+) -> Evidencia:
+    evidence = Evidencia(
+        id_incidente=id_incidente,
+        tipo_evidencia=tipo_evidencia,
+        archivo_url=archivo_url,
+        texto_extraido=texto_extraido,
+        descripcion=descripcion,
+    )
+    db.add(evidence)
+    db.flush()
+    db.refresh(evidence)
+    return evidence
+
+
+def list_evidences_by_incidente_id(db: Session, id_incidente: int) -> list[Evidencia]:
+    return list(
+        db.execute(
+            select(Evidencia)
+            .where(Evidencia.id_incidente == id_incidente)
+            .order_by(Evidencia.fecha_registro.desc(), Evidencia.id_evidencia.desc())
+        ).scalars()
+    )

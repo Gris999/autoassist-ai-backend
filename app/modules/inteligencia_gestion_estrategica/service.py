@@ -4,17 +4,21 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 
 from app.modules.inteligencia_gestion_estrategica.repository import (
+    create_processed_evidence,
     create_notification,
     get_cliente_by_id,
     get_evidencia_textos_by_incidente_id,
     get_incidente_by_id,
     get_pending_notification_by_incidente_usuario_tipo,
     get_usuario_by_id,
+    list_evidences_by_incidente_id,
     update_incidente_analysis_result,
 )
 from app.modules.inteligencia_gestion_estrategica.schemas import (
     AnalisisIncidenteManualRequest,
     AnalisisIncidenteResponse,
+    EvidenciaProcesadaResponse,
+    RegistrarEvidenciaProcesadaRequest,
     SolicitudMasInformacionResponse,
 )
 
@@ -121,6 +125,12 @@ QUESTIONS_BY_CATEGORY: dict[str, list[str]] = {
         "\u00bfCuenta con llave de repuesto?",
         "\u00bfLa cerradura responde o esta bloqueada?",
     ],
+}
+
+ALLOWED_EVIDENCE_TYPES = {
+    "TEXTO",
+    "AUDIO_TRANSCRITO",
+    "IMAGEN_ANALIZADA",
 }
 
 
@@ -269,6 +279,37 @@ def _get_questions_for_incident_classification(clasificacion_ia: str | None) -> 
     if not normalized_category or normalized_category not in QUESTIONS_BY_CATEGORY:
         normalized_category = "incierto"
     return QUESTIONS_BY_CATEGORY[normalized_category]
+
+
+def _serialize_archivo_url(archivo_url: str | None) -> str | None:
+    if not archivo_url:
+        return None
+    return archivo_url
+
+
+def _to_evidencia_procesada_response(
+    evidencia,
+    *,
+    mensaje: str | None = None,
+) -> EvidenciaProcesadaResponse:
+    return EvidenciaProcesadaResponse(
+        id_evidencia=evidencia.id_evidencia,
+        id_incidente=evidencia.id_incidente,
+        tipo_evidencia=evidencia.tipo_evidencia,
+        archivo_url=_serialize_archivo_url(evidencia.archivo_url),
+        texto_extraido=evidencia.texto_extraido,
+        descripcion=evidencia.descripcion,
+        mensaje=mensaje,
+    )
+
+
+def _normalize_evidence_type(tipo_evidencia: str) -> str:
+    normalized_type = tipo_evidencia.strip().upper()
+    if normalized_type not in ALLOWED_EVIDENCE_TYPES:
+        raise ValueError(
+            "tipo_evidencia no permitido. Use TEXTO, AUDIO_TRANSCRITO o IMAGEN_ANALIZADA."
+        )
+    return normalized_type
 
 
 def _run_incident_analysis(
@@ -437,3 +478,57 @@ def solicitar_mas_informacion_incidente_service(
     except Exception:
         db.rollback()
         raise
+
+
+def registrar_evidencia_procesada_service(
+    db: Session,
+    id_incidente: int,
+    payload: RegistrarEvidenciaProcesadaRequest,
+) -> EvidenciaProcesadaResponse:
+    incidente = get_incidente_by_id(db, id_incidente)
+    if not incidente:
+        raise IncidentNotFoundError("Incidente no encontrado.")
+
+    texto_extraido = payload.texto_extraido.strip()
+    if not texto_extraido:
+        raise ValueError("texto_extraido no puede estar vacio.")
+
+    tipo_evidencia = _normalize_evidence_type(payload.tipo_evidencia)
+    archivo_url = (payload.archivo_url or "").strip()
+    descripcion = payload.descripcion.strip() if payload.descripcion else None
+
+    try:
+        evidencia = create_processed_evidence(
+            db,
+            id_incidente=incidente.id_incidente,
+            tipo_evidencia=tipo_evidencia,
+            archivo_url=archivo_url,
+            texto_extraido=texto_extraido,
+            descripcion=descripcion,
+        )
+        db.commit()
+        return _to_evidencia_procesada_response(
+            evidencia,
+            mensaje=(
+                "Evidencia procesada registrada correctamente. "
+                "Se recomienda volver a ejecutar CU25 para reanalizar el incidente."
+            ),
+        )
+    except Exception:
+        db.rollback()
+        raise
+
+
+def listar_evidencias_procesadas_incidente_service(
+    db: Session,
+    id_incidente: int,
+) -> list[EvidenciaProcesadaResponse]:
+    incidente = get_incidente_by_id(db, id_incidente)
+    if not incidente:
+        raise IncidentNotFoundError("Incidente no encontrado.")
+
+    evidencias = list_evidences_by_incidente_id(db, id_incidente)
+    return [
+        _to_evidencia_procesada_response(evidencia)
+        for evidencia in evidencias
+    ]

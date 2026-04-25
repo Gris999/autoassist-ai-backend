@@ -5,6 +5,8 @@ from app.core.db.session import get_db
 from app.modules.inteligencia_gestion_estrategica.schemas import (
     AnalisisIncidenteManualRequest,
     AnalisisIncidenteResponse,
+    EvidenciaProcesadaResponse,
+    RegistrarEvidenciaProcesadaRequest,
     SolicitudMasInformacionResponse,
 )
 from app.modules.inteligencia_gestion_estrategica.service import (
@@ -14,6 +16,8 @@ from app.modules.inteligencia_gestion_estrategica.service import (
     IncidentUserNotFoundError,
     analizar_incidente_manual_service,
     analizar_incidente_por_id_service,
+    listar_evidencias_procesadas_incidente_service,
+    registrar_evidencia_procesada_service,
     solicitar_mas_informacion_incidente_service,
 )
 
@@ -102,4 +106,56 @@ def solicitar_mas_informacion_incidente(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Ocurrio un error inesperado al emitir la solicitud de mas informacion.",
+        ) from exc
+
+
+@router.post(
+    "/incidentes/{id_incidente}/evidencias/procesada",
+    response_model=EvidenciaProcesadaResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def registrar_evidencia_procesada(
+    id_incidente: int,
+    payload: RegistrarEvidenciaProcesadaRequest,
+    db: Session = Depends(get_db),
+):
+    try:
+        return registrar_evidencia_procesada_service(db, id_incidente, payload)
+    except IncidentNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Ocurrio un error inesperado al guardar la evidencia procesada.",
+        ) from exc
+
+
+@router.get(
+    "/incidentes/{id_incidente}/evidencias",
+    response_model=list[EvidenciaProcesadaResponse],
+    status_code=status.HTTP_200_OK,
+)
+def listar_evidencias_procesadas_incidente(
+    id_incidente: int,
+    db: Session = Depends(get_db),
+):
+    try:
+        return listar_evidencias_procesadas_incidente_service(db, id_incidente)
+    except IncidentNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Ocurrio un error inesperado al listar las evidencias del incidente.",
         ) from exc
