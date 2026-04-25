@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 
 class LoginRequest(BaseModel):
@@ -16,6 +16,14 @@ class TokenResponse(BaseModel):
 
 class RolResponse(BaseModel):
     id_rol: int
+    nombre: str
+    descripcion: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TipoTallerCatalogResponse(BaseModel):
+    id_tipo_taller: int
     nombre: str
     descripcion: str | None = None
 
@@ -53,9 +61,17 @@ class RegistroTallerRequest(BaseModel):
     nombre_taller: str = Field(min_length=2, max_length=150)
     nit: str = Field(min_length=5, max_length=30)
     direccion: str = Field(min_length=5, max_length=255)
-    latitud: Decimal | None = None
-    longitud: Decimal | None = None
-    radio_cobertura_km: Decimal | None = None
+    latitud: Decimal | None = Field(default=None, ge=Decimal("-90"), le=Decimal("90"))
+    longitud: Decimal | None = Field(default=None, ge=Decimal("-180"), le=Decimal("180"))
+    radio_cobertura_km: Decimal | None = Field(default=None, gt=Decimal("0"))
+
+    @model_validator(mode="after")
+    def validar_coordenadas_completas(self):
+        if (self.latitud is None) != (self.longitud is None):
+            raise ValueError(
+                "Latitud y longitud deben enviarse juntas o ambas omitirse."
+            )
+        return self
 
 
 class MensajeResponse(BaseModel):

@@ -57,6 +57,14 @@ def get_roles(db: Session) -> list[Rol]:
     )
 
 
+def get_tipos_taller(db: Session) -> list[TipoTaller]:
+    return list(
+        db.execute(
+            select(TipoTaller).order_by(TipoTaller.nombre.asc())
+        ).scalars()
+    )
+
+
 def get_roles_by_nombres(db: Session, nombres: list[str]) -> list[Rol]:
     if not nombres:
         return []
