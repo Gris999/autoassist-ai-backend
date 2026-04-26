@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     ROBOFLOW_MODEL_ID: str | None = None
     ROBOFLOW_TASK_TYPE: str = "classification"
     ROBOFLOW_TIMEOUT_SECONDS: float = 30.0
+    STRIPE_SECRET_KEY: str | None = None
+    STRIPE_PUBLISHABLE_KEY: str | None = None
+    STRIPE_WEBHOOK_SECRET: str | None = None
+    STRIPE_CURRENCY: str = "usd"
+    STRIPE_TIMEOUT_SECONDS: float = 30.0
+    PLATFORM_COMMISSION_PERCENTAGE: float = 10.0
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, WebSocket, WebSocketDisconnect, status
 from sqlalchemy.orm import Session
 
 from app.core.db.session import SessionLocal, get_db
@@ -10,24 +10,40 @@ from app.modules.seguimiento_monitoreo_servicio.schemas import (
     ActualizarUbicacionActualRequest,
     AsignacionAuxilioDetalleResponse,
     ClienteIncidenteListResponse,
+    ConfirmacionPagoDemoResponse,
+    ConfirmarPagoDemoRequest,
+    ComprobantePagoResponse,
+    CrearIntencionPagoRequest,
     EstadoServicioDetalleResponse,
     IncidenteHistorialDetailResponse,
     IncidenteHistorialListResponse,
+    IntencionPagoResponse,
     NotificacionDetailResponse,
     NotificacionLeidaResponse,
     NotificacionListResponse,
+    PagoIncidenteDetalleResponse,
     UbicacionActualTecnicoResponse,
+    WebhookStripeResponse,
 )
 from app.modules.seguimiento_monitoreo_servicio.service import (
+    PaymentAlreadyCompletedError,
+    PaymentConfigurationError,
+    PaymentNotEnabledError,
+    PaymentRecordNotFoundError,
     actualizar_ubicacion_actual_tecnico_service,
+    confirmar_pago_demo_service,
     consultar_asignacion_auxilio_service,
+    crear_intencion_pago_service,
     get_estado_servicio_service,
     listar_incidentes_historial_service,
     listar_incidentes_cliente_service,
     listar_notificaciones_service,
     marcar_notificacion_leida_service,
+    obtener_comprobante_pago_service,
+    obtener_detalle_pago_incidente_service,
     obtener_historial_incidente_service,
     obtener_notificacion_service,
+    procesar_webhook_stripe_service,
     validar_acceso_incidente_seguimiento_service,
 )
 
@@ -76,6 +92,108 @@ async def websocket_seguimiento_incidente(
         incident_location_manager.disconnect(id_incidente, websocket)
     finally:
         db.close()
+
+
+@router.get(
+    "/pagos/incidentes/{id_incidente}",
+    response_model=PagoIncidenteDetalleResponse,
+    status_code=status.HTTP_200_OK,
+)
+def obtener_detalle_pago_incidente(
+    id_incidente: int,
+    current_user: Usuario = Depends(require_roles("CLIENTE")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return obtener_detalle_pago_incidente_service(db, current_user, id_incidente)
+    except (PaymentNotEnabledError, PaymentAlreadyCompletedError, ValueError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.post(
+    "/pagos/incidentes/{id_incidente}/intencion",
+    response_model=IntencionPagoResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def crear_intencion_pago(
+    id_incidente: int,
+    payload: CrearIntencionPagoRequest,
+    current_user: Usuario = Depends(require_roles("CLIENTE")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return crear_intencion_pago_service(db, current_user, id_incidente, payload)
+    except (PaymentConfigurationError, PaymentNotEnabledError, PaymentAlreadyCompletedError, ValueError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.post(
+    "/pagos/incidentes/{id_incidente}/confirmar-demo",
+    response_model=ConfirmacionPagoDemoResponse,
+    status_code=status.HTTP_200_OK,
+)
+def confirmar_pago_demo(
+    id_incidente: int,
+    payload: ConfirmarPagoDemoRequest,
+    current_user: Usuario = Depends(require_roles("CLIENTE")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return confirmar_pago_demo_service(db, current_user, id_incidente, payload)
+    except (PaymentNotEnabledError, PaymentAlreadyCompletedError, ValueError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.get(
+    "/pagos/{id_pago_servicio}/comprobante",
+    response_model=ComprobantePagoResponse,
+    status_code=status.HTTP_200_OK,
+)
+def obtener_comprobante_pago(
+    id_pago_servicio: int,
+    current_user: Usuario = Depends(require_roles("CLIENTE")),
+    db: Session = Depends(get_db),
+):
+    try:
+        return obtener_comprobante_pago_service(db, current_user, id_pago_servicio)
+    except (PaymentConfigurationError, PaymentRecordNotFoundError, ValueError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+
+
+@router.post(
+    "/pagos/webhook",
+    response_model=WebhookStripeResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def procesar_webhook_pago(
+    request: Request,
+    stripe_signature: str | None = Header(default=None, alias="Stripe-Signature"),
+    db: Session = Depends(get_db),
+):
+    try:
+        raw_payload = await request.body()
+        return procesar_webhook_stripe_service(
+            db,
+            raw_payload=raw_payload,
+            stripe_signature=stripe_signature,
+        )
+    except (PaymentConfigurationError, PaymentRecordNotFoundError, ValueError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
 
 
 @router.get(
