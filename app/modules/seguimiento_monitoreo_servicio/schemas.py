@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 
 
 class EstadoServicioDetalleResponse(BaseModel):
@@ -27,6 +27,30 @@ class EstadoServicioDetalleResponse(BaseModel):
     confianza_clasificacion: Decimal | None = None
     resumen_ia: str | None = None
     requiere_mas_info: bool
+
+
+class ActualizarUbicacionActualRequest(BaseModel):
+    latitud: Decimal = Field(ge=-90, le=90)
+    longitud: Decimal = Field(ge=-180, le=180)
+    confirmar_envio: bool = True
+
+    @model_validator(mode="after")
+    def validar_confirmacion(self):
+        if not self.confirmar_envio:
+            raise ValueError("Debe confirmar el envio de la ubicacion actual.")
+        return self
+
+
+class UbicacionActualTecnicoResponse(BaseModel):
+    id_incidente: int
+    id_tecnico: int
+    id_unidad_movil: int | None = None
+    latitud_actual: Decimal
+    longitud_actual: Decimal
+    fecha_actualizacion: datetime
+    estado_asignacion: str
+    estado_servicio_actual: str
+    mensaje: str
 
 
 class ClienteIncidenteListResponse(BaseModel):

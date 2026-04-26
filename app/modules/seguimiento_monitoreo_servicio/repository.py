@@ -211,4 +211,4 @@ def get_incidente_historial_by_id(db: Session, id_incidente: int) -> Incidente |
             .joinedload(SolicitudTaller.taller.of_type(Taller)),
         )
         .where(Incidente.id_incidente == id_incidente)
-    ).scalar_one_or_none()
+    ).unique().scalar_one_or_none()

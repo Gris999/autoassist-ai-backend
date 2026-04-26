@@ -1,12 +1,21 @@
+import asyncio
+from datetime import datetime
+
+import anyio
 from sqlalchemy.orm import Session
 
 from app.modules.gestion_clientes.repository import get_cliente_by_usuario_id
 from app.modules.gestion_operativa_taller_tecnico.repository import (
+    get_asignacion_activa_by_tecnico_id,
     get_taller_by_usuario_id,
     get_tecnico_by_usuario_id,
+    update_tecnico,
+    update_unidad_movil,
 )
 from app.modules.seguimiento_monitoreo_servicio.models import Notificacion
+from app.modules.seguimiento_monitoreo_servicio.realtime import incident_location_manager
 from app.modules.seguimiento_monitoreo_servicio.schemas import (
+    ActualizarUbicacionActualRequest,
     AsignacionAuxilioDetalleResponse,
     ClienteIncidenteListResponse,
     EstadoServicioDetalleResponse,
@@ -20,6 +29,7 @@ from app.modules.seguimiento_monitoreo_servicio.schemas import (
     TallerAsignadoResponse,
     TecnicoAsignadoResponse,
     UnidadMovilAsignadaResponse,
+    UbicacionActualTecnicoResponse,
 )
 from app.modules.seguimiento_monitoreo_servicio.repository import (
     create_notificacion,
@@ -62,6 +72,41 @@ def _get_tecnico_autenticado(db: Session, current_user):
     return tecnico
 
 
+def _to_ubicacion_actual_tecnico_response(
+    *,
+    incidente,
+    asignacion,
+    tecnico,
+) -> UbicacionActualTecnicoResponse:
+    return UbicacionActualTecnicoResponse(
+        id_incidente=incidente.id_incidente,
+        id_tecnico=tecnico.id_tecnico,
+        id_unidad_movil=asignacion.id_unidad_movil,
+        latitud_actual=tecnico.latitud_actual,
+        longitud_actual=tecnico.longitud_actual,
+        fecha_actualizacion=datetime.utcnow(),
+        estado_asignacion=asignacion.estado_asignacion,
+        estado_servicio_actual=incidente.estado_servicio_actual.nombre,
+        mensaje="Ubicacion actualizada correctamente.",
+    )
+
+
+def _emitir_actualizacion_tiempo_real(id_incidente: int, payload: dict) -> None:
+    try:
+        anyio.from_thread.run(
+            incident_location_manager.broadcast_incident_update,
+            id_incidente,
+            payload,
+        )
+    except RuntimeError:
+        asyncio.run(
+            incident_location_manager.broadcast_incident_update(
+                id_incidente,
+                payload,
+            )
+        )
+
+
 def _resolver_rol_historial_service(db: Session, current_user) -> str:
     roles = set(get_roles_by_usuario_id(db, current_user.id_usuario))
     if "ADMIN" in roles:
@@ -73,6 +118,18 @@ def _resolver_rol_historial_service(db: Session, current_user) -> str:
     if "CLIENTE" in roles:
         return "CLIENTE"
     raise ValueError("El usuario autenticado no tiene un rol valido para consultar historial.")
+
+
+def validar_acceso_incidente_seguimiento_service(
+    db: Session,
+    current_user,
+    id_incidente: int,
+):
+    incidente = get_incidente_historial_by_id(db, id_incidente)
+    if not incidente:
+        raise ValueError("El incidente especificado no existe.")
+    _validar_acceso_historial_incidente(db, current_user, incidente)
+    return incidente
 
 
 def _to_notificacion_list_response(notificacion: Notificacion) -> NotificacionListResponse:
@@ -472,3 +529,56 @@ def get_estado_servicio_service(
         resumen_ia=incidente.resumen_ia,
         requiere_mas_info=incidente.requiere_mas_info,
     )
+
+
+def actualizar_ubicacion_actual_tecnico_service(
+    db: Session,
+    current_user,
+    id_incidente: int,
+    payload: ActualizarUbicacionActualRequest,
+) -> UbicacionActualTecnicoResponse:
+    tecnico = _get_tecnico_autenticado(db, current_user)
+    asignacion_activa = get_asignacion_activa_by_tecnico_id(db, tecnico.id_tecnico)
+    if not asignacion_activa:
+        raise ValueError("El tecnico no tiene ningun incidente activo asignado.")
+    if asignacion_activa.id_incidente != id_incidente:
+        raise ValueError("El incidente indicado no corresponde a la asignacion activa del tecnico.")
+
+    incidente = get_incidente_historial_by_id(db, id_incidente)
+    if not incidente:
+        raise ValueError("El incidente especificado no existe.")
+
+    try:
+        tecnico_actualizado = update_tecnico(
+            db,
+            tecnico,
+            latitud_actual=payload.latitud,
+            longitud_actual=payload.longitud,
+        )
+
+        if asignacion_activa.unidad_movil is not None:
+            update_unidad_movil(
+                db,
+                asignacion_activa.unidad_movil,
+                latitud_actual=payload.latitud,
+                longitud_actual=payload.longitud,
+            )
+
+        db.commit()
+        db.refresh(tecnico_actualizado)
+        response = _to_ubicacion_actual_tecnico_response(
+            incidente=incidente,
+            asignacion=asignacion_activa,
+            tecnico=tecnico_actualizado,
+        )
+        _emitir_actualizacion_tiempo_real(
+            incidente.id_incidente,
+            {
+                "type": "ubicacion_actualizada",
+                "payload": response.model_dump(mode="json"),
+            },
+        )
+        return response
+    except Exception:
+        db.rollback()
+        raise
